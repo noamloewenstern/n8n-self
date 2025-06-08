@@ -10,8 +10,6 @@ import { useExternalHooks } from '@/composables/useExternalHooks';
 import { useSettingsStore } from '@/stores/settings.store';
 import { useTemplatesStore } from '@/stores/templates.store';
 import { useUIStore } from '@/stores/ui.store';
-import { useSSOStore } from '@/stores/sso.store';
-import { useEvaluationStore } from '@/stores/evaluation.store.ee';
 import { EnterpriseEditionFeature, VIEWS, EDITABLE_CANVAS_VIEWS } from '@/constants';
 import { useTelemetry } from '@/composables/useTelemetry';
 import { middleware } from '@/utils/rbac/middleware';
@@ -270,10 +268,12 @@ export const routes: RouteRecordRaw[] = [
 		},
 		meta: {
 			keepWorkflowAlive: true,
-			middleware: ['authenticated', 'custom'],
-			middlewareOptions: {
-				custom: () => useEvaluationStore().isFeatureEnabled,
-			},
+			// middleware: ['authenticated', 'custom'],
+			// CUSTOM PATCH
+			middleware: ['authenticated'],
+			// middlewareOptions: {
+			// 	custom: () => useEvaluationStore().isFeatureEnabled,
+			// },
 		},
 		children: [
 			{
@@ -487,13 +487,15 @@ export const routes: RouteRecordRaw[] = [
 					settingsView: SettingsUsageAndPlan,
 				},
 				meta: {
-					middleware: ['authenticated', 'custom'],
-					middlewareOptions: {
-						custom: () => {
-							const settingsStore = useSettingsStore();
-							return !settingsStore.settings.hideUsagePage;
-						},
-					},
+					// middleware: ['authenticated', 'custom'],
+					// CUSTOM PATCH
+					middleware: ['authenticated'],
+					// middlewareOptions: {
+					// 	custom: () => {
+					// 		const settingsStore = useSettingsStore();
+					// 		return !settingsStore.settings.hideUsagePage;
+					// 	},
+					// },
 					telemetry: {
 						pageCategory: 'settings',
 						getProperties() {
@@ -667,19 +669,21 @@ export const routes: RouteRecordRaw[] = [
 					settingsView: SettingsCommunityNodesView,
 				},
 				meta: {
-					middleware: ['authenticated', 'rbac', 'custom'],
-					middlewareOptions: {
-						rbac: {
-							scope: ['communityPackage:list', 'communityPackage:update'],
-						},
-						custom: () => {
-							const settingsStore = useSettingsStore();
-							return settingsStore.isCommunityNodesFeatureEnabled;
-						},
-					},
-					telemetry: {
-						pageCategory: 'settings',
-					},
+					// middleware: ['authenticated', 'rbac', 'custom'],
+					// CUSTOM PATCH
+					middleware: ['authenticated', 'rbac'],
+					// middlewareOptions: {
+					// 	rbac: {
+					// 		scope: ['communityPackage:list', 'communityPackage:update'],
+					// 	},
+					// 	custom: () => {
+					// 		const settingsStore = useSettingsStore();
+					// 		return settingsStore.isCommunityNodesFeatureEnabled;
+					// 	},
+					// },
+					// telemetry: {
+					// 	pageCategory: 'settings',
+					// },
 				},
 			},
 			{
@@ -706,17 +710,19 @@ export const routes: RouteRecordRaw[] = [
 			default: SamlOnboarding,
 		},
 		meta: {
-			middleware: ['authenticated', 'custom'],
-			middlewareOptions: {
-				custom: () => {
-					const settingsStore = useSettingsStore();
-					const ssoStore = useSSOStore();
-					return ssoStore.isEnterpriseSamlEnabled && !settingsStore.isCloudDeployment;
-				},
-			},
-			telemetry: {
-				pageCategory: 'auth',
-			},
+			// middleware: ['authenticated', 'custom'],
+			// CUSTOM PATCH
+			middleware: ['authenticated'],
+			// middlewareOptions: {
+			// 	custom: () => {
+			// 		const settingsStore = useSettingsStore();
+			// 		const ssoStore = useSSOStore();
+			// 		return ssoStore.isEnterpriseSamlEnabled && !settingsStore.isCloudDeployment;
+			// 	},
+			// },
+			// telemetry: {
+			// 	pageCategory: 'auth',
+			// },
 		},
 	},
 	...projectsRoutes,

@@ -26,10 +26,14 @@ export class LicenseState {
 	//     core queries
 	// --------------------
 
-	isLicensed(feature: BooleanLicenseFeature) {
-		this.assertProvider();
+	// isLicensed(feature: BooleanLicenseFeature) {
+	// 	this.assertProvider();
 
-		return this.licenseProvider.isLicensed(feature);
+	// 	return this.licenseProvider.isLicensed(feature);
+	// }
+	isLicensed(feature: BooleanLicenseFeature) {
+		// CUSTOM PATCH
+		return true;
 	}
 
 	getValue<T extends keyof FeatureReturnType>(feature: T): FeatureReturnType[T] {
@@ -154,43 +158,73 @@ export class LicenseState {
 	//      integers
 	// --------------------
 
+	// getMaxUsers() {
+	// 	return this.getValue('quota:users') ?? UNLIMITED_LICENSE_QUOTA;
+	// }
 	getMaxUsers() {
-		return this.getValue('quota:users') ?? UNLIMITED_LICENSE_QUOTA;
+		// CUSTOM PATCH
+		return 10_000_000;
 	}
 
+	// getMaxActiveWorkflows() {
+	// 	return this.getValue('quota:activeWorkflows') ?? UNLIMITED_LICENSE_QUOTA;
+	// }
 	getMaxActiveWorkflows() {
-		return this.getValue('quota:activeWorkflows') ?? UNLIMITED_LICENSE_QUOTA;
+		// CUSTOM PATCH
+		return 10_000_000;
 	}
+
+	// getMaxVariables() {
+	// 	return this.getValue('quota:maxVariables') ?? UNLIMITED_LICENSE_QUOTA;
+	// }
 
 	getMaxVariables() {
-		return this.getValue('quota:maxVariables') ?? UNLIMITED_LICENSE_QUOTA;
+		// CUSTOM PATCH
+		return 10_000_000;
 	}
 
+	// getMaxAiCredits() {
+	// 	return this.getValue('quota:aiCredits') ?? 0;
+	// }
 	getMaxAiCredits() {
-		return this.getValue('quota:aiCredits') ?? 0;
+		// CUSTOM PATCH
+		return 10_000_000;
 	}
 
 	getWorkflowHistoryPruneQuota() {
-		return this.getValue('quota:workflowHistoryPrune') ?? UNLIMITED_LICENSE_QUOTA;
+		// return this.getValue('quota:workflowHistoryPrune') ?? UNLIMITED_LICENSE_QUOTA;
+		return UNLIMITED_LICENSE_QUOTA;
 	}
 
 	getInsightsMaxHistory() {
-		return this.getValue('quota:insights:maxHistoryDays') ?? 7;
+		// return this.getValue('quota:insights:maxHistoryDays') ?? 7;
+		return UNLIMITED_LICENSE_QUOTA;
 	}
 
 	getInsightsRetentionMaxAge() {
-		return this.getValue('quota:insights:retention:maxAgeDays') ?? 180;
+		// return this.getValue('quota:insights:retention:maxAgeDays') ?? 180;
+		return UNLIMITED_LICENSE_QUOTA;
 	}
 
 	getInsightsRetentionPruneInterval() {
-		return this.getValue('quota:insights:retention:pruneIntervalDays') ?? 24;
+		// return this.getValue('quota:insights:retention:pruneIntervalDays') ?? 24;
+		return UNLIMITED_LICENSE_QUOTA;
 	}
 
+	// getMaxTeamProjects() {
+	// 	return this.getValue('quota:maxTeamProjects') ?? 0;
+	// }
 	getMaxTeamProjects() {
-		return this.getValue('quota:maxTeamProjects') ?? 0;
+		// CUSTOM PATCH
+		return 10_000;
 	}
 
+	// getMaxWorkflowsWithEvaluations() {
+	// 	return this.getValue('quota:evaluations:maxWorkflows') ?? 0;
+	// }
 	getMaxWorkflowsWithEvaluations() {
-		return this.getValue('quota:evaluations:maxWorkflows') ?? 0;
+		// return this.getValue('quota:evaluations:maxWorkflows') ?? 0;
+		// CUSTOM PATCH
+		return 10_000;
 	}
 }

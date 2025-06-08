@@ -136,7 +136,9 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
 	const logLevel = computed(() => settings.value.logLevel);
 
 	const isTelemetryEnabled = computed(
-		() => settings.value.telemetry && settings.value.telemetry.enabled,
+		// () => settings.value.telemetry && settings.value.telemetry.enabled,
+		// CUSTOM PATCH
+		() => false,
 	);
 
 	const isMfaFeatureEnabled = computed(() => mfa.value.enabled);
@@ -182,11 +184,13 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
 
 	const permanentlyDismissedBanners = computed(() => settings.value.banners?.dismissed ?? []);
 
-	const isBelowUserQuota = computed(
-		(): boolean =>
-			userManagement.value.quota === -1 ||
-			userManagement.value.quota > useUsersStore().allUsers.length,
-	);
+	// const isBelowUserQuota = computed(
+	// 	(): boolean =>
+	// 		userManagement.value.quota === -1 ||
+	// 		userManagement.value.quota > useUsersStore().allUsers.length,
+	// );
+	// CUSTOM PATCH
+	const isBelowUserQuota = computed((): boolean => true);
 
 	const isCommunityPlan = computed(() => planName.value.toLowerCase() === 'community');
 

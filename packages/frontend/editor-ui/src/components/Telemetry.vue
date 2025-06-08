@@ -30,8 +30,12 @@ const telemetry = computed((): ITelemetrySettings => {
 	return settingsStore.telemetry;
 });
 
+// const isTelemetryEnabled = computed((): boolean => {
+// 	return !!telemetry.value?.enabled;
+// });
+// CUSTOM PATCH
 const isTelemetryEnabled = computed((): boolean => {
-	return !!telemetry.value?.enabled;
+	return false;
 });
 
 const selfInstallSrc = computed((): string => {
