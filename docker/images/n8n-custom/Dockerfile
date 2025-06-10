@@ -1,7 +1,7 @@
 ARG NODE_VERSION=22
-
+ARG PLATFORM=linux/x86_64
 # 1. Create an image to build n8n
-FROM --platform=linux/amd64 n8nio/base:${NODE_VERSION} AS builder
+FROM --platform=${PLATFORM} n8nio/base:${NODE_VERSION} AS builder
 
 # Build the application from source
 WORKDIR /src
@@ -60,7 +60,6 @@ RUN \
 
 # Install npm 11.4.1 to fix the vulnerable cross-spawn dependency
 RUN npm install -g npm@11.4.1
-RUN apk --purge del apk-tools
 
 ENV SHELL /bin/sh
 USER node
