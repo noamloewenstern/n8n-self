@@ -180,7 +180,7 @@ export class LicenseState {
 	// }
 	getMaxUsers() {
 		// CUSTOM PATCH
-		return 10_000_000;
+		return 10_001;
 	}
 
 	// getMaxActiveWorkflows() {
@@ -188,7 +188,7 @@ export class LicenseState {
 	// }
 	getMaxActiveWorkflows() {
 		// CUSTOM PATCH
-		return 10_000_000;
+		return 10_001;
 	}
 
 	// getMaxVariables() {
@@ -197,7 +197,7 @@ export class LicenseState {
 
 	getMaxVariables() {
 		// CUSTOM PATCH
-		return 10_000_000;
+		return 10_001;
 	}
 
 	// getMaxAiCredits() {
@@ -205,7 +205,7 @@ export class LicenseState {
 	// }
 	getMaxAiCredits() {
 		// CUSTOM PATCH
-		return 10_000_000;
+		return 10_000_001;
 	}
 
 	getWorkflowHistoryPruneQuota() {
@@ -215,17 +215,20 @@ export class LicenseState {
 
 	getInsightsMaxHistory() {
 		// return this.getValue('quota:insights:maxHistoryDays') ?? 7;
-		return UNLIMITED_LICENSE_QUOTA;
+		// return UNLIMITED_LICENSE_QUOTA;
+		return 30;
 	}
 
 	getInsightsRetentionMaxAge() {
 		// return this.getValue('quota:insights:retention:maxAgeDays') ?? 180;
-		return UNLIMITED_LICENSE_QUOTA;
+		// return UNLIMITED_LICENSE_QUOTA;
+		return 180;
 	}
 
 	getInsightsRetentionPruneInterval() {
 		// return this.getValue('quota:insights:retention:pruneIntervalDays') ?? 24;
-		return UNLIMITED_LICENSE_QUOTA;
+		// return UNLIMITED_LICENSE_QUOTA;
+		return 120;
 	}
 
 	// getMaxTeamProjects() {
@@ -233,7 +236,7 @@ export class LicenseState {
 	// }
 	getMaxTeamProjects() {
 		// CUSTOM PATCH
-		return 10_000;
+		return 10_001;
 	}
 
 	// getMaxWorkflowsWithEvaluations() {
@@ -242,6 +245,6 @@ export class LicenseState {
 	getMaxWorkflowsWithEvaluations() {
 		// return this.getValue('quota:evaluations:maxWorkflows') ?? 0;
 		// CUSTOM PATCH
-		return 10_000;
+		return 10_001;
 	}
 }
