@@ -710,8 +710,8 @@ const allTriggerNodesDisabled = computed(() => {
 	return disabledTriggerNodes.length === triggerNodes.value.length;
 });
 
-function onTidyUp(event: CanvasLayoutEvent) {
-	tidyUp(event);
+function onTidyUp(event: CanvasLayoutEvent, options?: { trackEvents?: boolean }) {
+	tidyUp(event, options);
 }
 
 function onExtractWorkflow(nodeIds: string[]) {
@@ -1114,9 +1114,11 @@ async function importWorkflowExact({ workflow: workflowData }: { workflow: Workf
 
 async function onImportWorkflowDataEvent(data: IDataObject) {
 	const workflowData = data.data as WorkflowDataUpdate;
+	const trackEvents = typeof data.trackEvents === 'boolean' ? data.trackEvents : undefined;
 	await importWorkflowData(workflowData, 'file', {
 		viewport: viewportBoundaries.value,
 		regenerateIds: data.regenerateIds === true || data.regenerateIds === undefined,
+		trackEvents,
 	});
 
 	fitView();
@@ -1127,6 +1129,7 @@ async function onImportWorkflowDataEvent(data: IDataObject) {
 			canvasEventBus.emit('tidyUp', {
 				source: 'import-workflow-data',
 				nodeIdsFilter: nodesIdsToTidyUp,
+				trackEvents,
 			});
 		}, 0);
 	}
@@ -1889,7 +1892,7 @@ watch(
 			name: CanvasNodeRenderType.AIPrompt,
 			type: CanvasNodeRenderType.AIPrompt,
 			typeVersion: 1,
-			position: [-690, -15],
+			position: [-300, -100],
 			parameters: {},
 			draggable: false,
 		};
