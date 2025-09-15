@@ -23,13 +23,12 @@ export const getN8NVersion = (): string => {
 export const N8N_VERSION = getN8NVersion();
 
 export const BASE_URL = process.env.AIRTOP_BASE_URL ?? 'https://api.airtop.ai/api/v1';
-export const INTEGRATION_URL =
-	process.env.AIRTOP_INTEGRATION_URL ?? 'https://portal-api.airtop.ai/integrations/v1/no-code';
 
 // Session operations
 export const DEFAULT_TIMEOUT_MINUTES = 10;
 export const MIN_TIMEOUT_MINUTES = 1;
 export const MAX_TIMEOUT_MINUTES = 10080;
+export const DEFAULT_DOWNLOAD_TIMEOUT_SECONDS = 30;
 export const SESSION_STATUS = {
 	INITIALIZING: 'initializing',
 	RUNNING: 'running',

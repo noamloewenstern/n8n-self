@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
-/* eslint-disable @typescript-eslint/no-use-before-define */
+
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import type { PushMessage, PushType } from '@n8n/api-types';
-import { Logger } from '@n8n/backend-common';
+import { Logger, ModuleRegistry } from '@n8n/backend-common';
 import { GlobalConfig } from '@n8n/config';
 import { ExecutionRepository, WorkflowRepository } from '@n8n/db';
 import { Container } from '@n8n/di';
@@ -36,7 +36,7 @@ import { ActiveExecutions } from '@/active-executions';
 import { CredentialsHelper } from '@/credentials-helper';
 import { EventService } from '@/events/event.service';
 import type { AiEventMap, AiEventPayload } from '@/events/maps/ai.event-map';
-// eslint-disable-next-line import/no-cycle
+// eslint-disable-next-line import-x/no-cycle
 import { getLifecycleHooksForSubExecutions } from '@/execution-lifecycle/execution-lifecycle-hooks';
 import { ExecutionDataService } from '@/executions/execution-data.service';
 import {
@@ -234,6 +234,11 @@ async function startExecution(
 		// This one already contains changes to talk to parent process
 		// and get executionID from `activeExecutions` running on main process
 		additionalDataIntegrated.executeWorkflow = additionalData.executeWorkflow;
+		if (additionalData.httpResponse) {
+			additionalDataIntegrated.httpResponse = additionalData.httpResponse;
+		}
+		// Propagate streaming state to subworkflows
+		additionalDataIntegrated.streamingEnabled = additionalData.streamingEnabled;
 
 		let subworkflowTimeout = additionalData.executionTimeoutTimestamp;
 		const workflowSettings = workflowData.settings;
@@ -372,7 +377,7 @@ export async function getBase(
 
 	const eventService = Container.get(EventService);
 
-	return {
+	const additionalData: IWorkflowExecuteAdditionalData = {
 		currentNodeExecutionIndex: 0,
 		credentialsHelper: Container.get(CredentialsHelper),
 		executeWorkflow,
@@ -387,6 +392,15 @@ export async function getBase(
 		userId,
 		setExecutionStatus,
 		variables,
+		async getRunExecutionData(executionId) {
+			const executionRepository = Container.get(ExecutionRepository);
+			const executionData = await executionRepository.findSingleExecution(executionId, {
+				unflattenData: true,
+				includeData: true,
+			});
+
+			return executionData?.data;
+		},
 		externalSecretsProxy: Container.get(ExternalSecretsProxy),
 		async startRunnerTask(
 			additionalData: IWorkflowExecuteAdditionalData,
@@ -428,4 +442,12 @@ export async function getBase(
 		logAiEvent: (eventName: keyof AiEventMap, payload: AiEventPayload) =>
 			eventService.emit(eventName, payload),
 	};
+
+	for (const [moduleName, moduleContext] of Container.get(ModuleRegistry).context.entries()) {
+		// @ts-expect-error Adding an index signature `[key: string]: unknown`
+		// to `IWorkflowExecuteAdditionalData` triggers complex type errors for derived types.
+		additionalData[moduleName] = moduleContext;
+	}
+
+	return additionalData;
 }

@@ -2,8 +2,8 @@
 import type { SimplifiedNodeType } from '@/Interface';
 import { getNodeIconSource, type NodeIconSource } from '@/utils/nodeIcon';
 import { N8nNodeIcon } from '@n8n/design-system';
-import { computed } from 'vue';
 import type { VersionNode } from '@n8n/rest-api-client/api/versions';
+import { computed } from 'vue';
 
 type Props = {
 	size?: number;
@@ -62,7 +62,9 @@ const badge = computed(() => {
 	return iconSource.value.badge;
 });
 
-const nodeTypeName = computed(() => props.nodeName ?? props.nodeType?.displayName);
+const nodeTypeName = computed(() =>
+	props.nodeName && props.nodeName !== '' ? props.nodeName : props.nodeType?.displayName,
+);
 </script>
 
 <template>
@@ -70,7 +72,6 @@ const nodeTypeName = computed(() => props.nodeName ?? props.nodeType?.displayNam
 		:type="iconType"
 		:src="src"
 		:name="iconName"
-		:color="iconColor"
 		:disabled="disabled"
 		:size="size"
 		:circle="circle"
@@ -78,8 +79,13 @@ const nodeTypeName = computed(() => props.nodeName ?? props.nodeType?.displayNam
 		:show-tooltip="showTooltip"
 		:tooltip-position="tooltipPosition"
 		:badge="badge"
+		:class="$style.nodeIcon"
 		@click="emit('click')"
 	></N8nNodeIcon>
 </template>
 
-<style lang="scss" module></style>
+<style lang="scss" module>
+.nodeIcon {
+	--node-icon-color: var(--canvas-node-icon-color, v-bind(iconColor));
+}
+</style>

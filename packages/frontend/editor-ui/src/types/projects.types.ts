@@ -1,5 +1,5 @@
 import type { Scope, ProjectRole } from '@n8n/permissions';
-import type { IUserResponse } from '@/Interface';
+import type { IUserResponse } from '@n8n/rest-api-client/api/users';
 
 export const ProjectTypes = {
 	Personal: 'personal',
@@ -11,14 +11,15 @@ type ProjectTypeKeys = typeof ProjectTypes;
 
 export type ProjectType = ProjectTypeKeys[keyof ProjectTypeKeys];
 export type ProjectRelation = Pick<IUserResponse, 'id' | 'email' | 'firstName' | 'lastName'> & {
-	role: ProjectRole;
+	role: string;
 };
 export type ProjectRelationPayload = { userId: string; role: ProjectRole };
 export type ProjectSharingData = {
 	id: string;
 	name: string | null;
-	icon: ProjectIcon | null;
+	icon: { type: 'emoji'; value: string } | { type: 'icon'; value: string } | null;
 	type: ProjectType;
+	description?: string | null;
 	createdAt: string;
 	updatedAt: string;
 };
@@ -31,8 +32,3 @@ export type ProjectListItem = ProjectSharingData & {
 	scopes?: Scope[];
 };
 export type ProjectsCount = Record<ProjectType, number>;
-
-export type ProjectIcon = {
-	type: 'icon' | 'emoji';
-	value: string;
-};

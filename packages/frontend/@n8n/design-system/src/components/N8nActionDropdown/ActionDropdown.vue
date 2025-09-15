@@ -1,4 +1,4 @@
-<script lang="ts" setup>
+<script lang="ts" setup generic="T extends string">
 // This component is visually similar to the ActionToggle component
 // but it offers more options when it comes to dropdown items styling
 // (supports icons, separators, custom styling and all options provided
@@ -8,29 +8,32 @@
 import { ElDropdown, ElDropdownMenu, ElDropdownItem, type Placement } from 'element-plus';
 import { ref, useCssModule, useAttrs, computed } from 'vue';
 
-import type { IconSize } from '@n8n/design-system/types/icon';
+import type { ActionDropdownItem, IconSize, ButtonSize } from '@n8n/design-system/types';
 
-import type { ActionDropdownItem } from '../../types';
+import N8nBadge from '../N8nBadge';
 import N8nIcon from '../N8nIcon';
+import { type IconName } from '../N8nIcon/icons';
+import N8nIconButton from '../N8nIconButton';
 import { N8nKeyboardShortcut } from '../N8nKeyboardShortcut';
 
 const TRIGGER = ['click', 'hover'] as const;
 
 interface ActionDropdownProps {
-	items: ActionDropdownItem[];
+	items: Array<ActionDropdownItem<T>>;
 	placement?: Placement;
-	activatorIcon?: string;
-	activatorSize?: IconSize;
+	activatorIcon?: IconName;
+	activatorSize?: ButtonSize;
 	iconSize?: IconSize;
 	trigger?: (typeof TRIGGER)[number];
 	hideArrow?: boolean;
 	teleported?: boolean;
 	disabled?: boolean;
+	extraPopperClass?: string;
 }
 
 const props = withDefaults(defineProps<ActionDropdownProps>(), {
 	placement: 'bottom',
-	activatorIcon: 'ellipsis-h',
+	activatorIcon: 'ellipsis',
 	activatorSize: 'medium',
 	iconSize: 'medium',
 	trigger: 'click',
@@ -43,7 +46,7 @@ const attrs = useAttrs();
 const testIdPrefix = attrs['data-test-id'];
 
 const $style = useCssModule();
-const getItemClasses = (item: ActionDropdownItem): Record<string, boolean> => {
+const getItemClasses = (item: ActionDropdownItem<T>): Record<string, boolean> => {
 	return {
 		[$style.itemContainer]: true,
 		[$style.disabled]: !!item.disabled,
@@ -53,22 +56,23 @@ const getItemClasses = (item: ActionDropdownItem): Record<string, boolean> => {
 };
 
 const emit = defineEmits<{
-	select: [action: string];
+	select: [action: T];
 	visibleChange: [open: boolean];
 }>();
 
 defineSlots<{
 	activator: {};
-	menuItem: (props: ActionDropdownItem) => void;
+	menuItem: (props: ActionDropdownItem<T>) => void;
 }>();
 
 const elementDropdown = ref<InstanceType<typeof ElDropdown>>();
 
 const popperClass = computed(
-	() => `${$style.shadow}${props.hideArrow ? ` ${$style.hideArrow}` : ''}`,
+	() =>
+		`${$style.shadow}${props.hideArrow ? ` ${$style.hideArrow}` : ''} ${props.extraPopperClass ?? ''}`,
 );
 
-const onSelect = (action: string) => emit('select', action);
+const onSelect = (action: T) => emit('select', action);
 const onVisibleChange = (open: boolean) => emit('visibleChange', open);
 
 const onButtonBlur = (event: FocusEvent) => {
@@ -96,7 +100,7 @@ defineExpose({ open, close });
 			@visible-change="onVisibleChange"
 		>
 			<slot v-if="$slots.activator" name="activator" />
-			<n8n-icon-button
+			<N8nIconButton
 				v-else
 				type="tertiary"
 				text
@@ -125,7 +129,12 @@ defineExpose({ open, close });
 									{{ item.label }}
 								</slot>
 							</span>
-							<N8nIcon v-if="item.checked" icon="check" :size="iconSize" />
+							<N8nIcon
+								v-if="item.checked"
+								:class="$style.checkIcon"
+								icon="check"
+								:size="iconSize"
+							/>
 							<span v-if="item.badge">
 								<N8nBadge theme="primary" size="xsmall" v-bind="item.badgeProps">
 									{{ item.badge }}
@@ -190,12 +199,18 @@ defineExpose({ open, close });
 }
 
 .icon {
+	display: flex;
 	text-align: center;
 	margin-right: var(--spacing-2xs);
 
 	svg {
 		width: 1.2em !important;
 	}
+}
+
+.checkIcon {
+	flex-grow: 0;
+	flex-shrink: 0;
 }
 
 .shortcut {

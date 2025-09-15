@@ -4,11 +4,12 @@ import { Workflow, type IRunExecutionData } from 'n8n-workflow';
 import { useWorkflowsStore } from '@/stores/workflows.store';
 import { useNodeHelpers } from '@/composables/useNodeHelpers';
 import { useThrottleFn } from '@vueuse/core';
-import { createLogTree, deepToRaw, mergeStartData } from '@/features/logs/logs.utils';
+import { createLogTree, findSubExecutionLocator, mergeStartData } from '@/features/logs/logs.utils';
 import { parse } from 'flatted';
 import { useToast } from '@/composables/useToast';
 import type { LatestNodeInfo, LogEntry } from '../logs.types';
 import { isChatNode } from '@/utils/aiUtils';
+import { LOGS_EXECUTION_DATA_THROTTLE_DURATION, PLACEHOLDER_EMPTY_WORKFLOW_ID } from '@/constants';
 
 export function useLogsExecutionData() {
 	const nodeHelpers = useNodeHelpers();
@@ -47,6 +48,7 @@ export function useLogsExecutionData() {
 			nodes.some(isChatNode),
 		),
 	);
+
 	const entries = computed<LogEntry[]>(() => {
 		if (!execData.value?.data || !workflow.value) {
 			return [];
@@ -59,7 +61,10 @@ export function useLogsExecutionData() {
 			subWorkflowExecData.value,
 		);
 	});
-	const updateInterval = computed(() => ((entries.value?.length ?? 0) > 10 ? 300 : 0));
+
+	const updateInterval = computed(() =>
+		(entries.value?.length ?? 0) > 1 ? LOGS_EXECUTION_DATA_THROTTLE_DURATION : 0,
+	);
 
 	function resetExecutionData() {
 		execData.value = undefined;
@@ -68,15 +73,14 @@ export function useLogsExecutionData() {
 	}
 
 	async function loadSubExecution(logEntry: LogEntry) {
-		const executionId = logEntry.runData.metadata?.subExecution?.executionId;
-		const workflowId = logEntry.runData.metadata?.subExecution?.workflowId;
+		const locator = findSubExecutionLocator(logEntry);
 
-		if (!execData.value?.data || !executionId || !workflowId) {
+		if (!execData.value?.data || locator === undefined) {
 			return;
 		}
 
 		try {
-			const subExecution = await workflowsStore.fetchExecutionDataById(executionId);
+			const subExecution = await workflowsStore.fetchExecutionDataById(locator.executionId);
 			const data = subExecution?.data
 				? (parse(subExecution.data as unknown as string) as IRunExecutionData)
 				: undefined;
@@ -85,8 +89,8 @@ export function useLogsExecutionData() {
 				throw Error('Data is missing');
 			}
 
-			subWorkflowExecData.value[executionId] = data;
-			subWorkflows.value[workflowId] = new Workflow({
+			subWorkflowExecData.value[locator.executionId] = data;
+			subWorkflows.value[locator.workflowId] = new Workflow({
 				...subExecution.workflowData,
 				nodeTypes: workflowsStore.getNodeTypes(),
 			});
@@ -109,12 +113,10 @@ export function useLogsExecutionData() {
 				execData.value =
 					workflowsStore.workflowExecutionData === null
 						? undefined
-						: deepToRaw(
-								mergeStartData(
-									workflowsStore.workflowExecutionStartedData?.[1] ?? {},
-									workflowsStore.workflowExecutionData,
-								),
-							); // Create deep copy to disable reactivity
+						: mergeStartData(
+								workflowsStore.workflowExecutionStartedData?.[1] ?? {},
+								workflowsStore.workflowExecutionData,
+							);
 
 				if (executionId !== previousExecutionId) {
 					// Reset sub workflow data when top-level execution changes
@@ -127,6 +129,15 @@ export function useLogsExecutionData() {
 			true,
 		),
 		{ immediate: true },
+	);
+
+	watch(
+		() => workflowsStore.workflowId,
+		(newId) => {
+			if (newId === PLACEHOLDER_EMPTY_WORKFLOW_ID) {
+				resetExecutionData();
+			}
+		},
 	);
 
 	return {

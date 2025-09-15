@@ -1,34 +1,28 @@
 import { computed, ref } from 'vue';
 import Bowser from 'bowser';
-import type { IUserManagementSettings, FrontendSettings } from '@n8n/api-types';
+import type {
+	IUserManagementSettings,
+	FrontendSettings,
+	FrontendModuleSettings,
+} from '@n8n/api-types';
 
 import * as eventsApi from '@n8n/rest-api-client/api/events';
-import * as ldapApi from '@n8n/rest-api-client/api/ldap';
 import * as settingsApi from '@n8n/rest-api-client/api/settings';
-import * as promptsApi from '@n8n/rest-api-client/api/prompts';
-import { testHealthEndpoint } from '@/api/templates';
-import type { LdapConfig } from '@n8n/rest-api-client/api/ldap';
-import {
-	INSECURE_CONNECTION_WARNING,
-	LOCAL_STORAGE_EXPERIMENTAL_MIN_ZOOM_NODE_SETTINGS_IN_CANVAS,
-} from '@/constants';
+import * as moduleSettingsApi from '@n8n/rest-api-client/api/module-settings';
+import { testHealthEndpoint } from '@n8n/rest-api-client/api/templates';
+import { INSECURE_CONNECTION_WARNING } from '@/constants';
 import { STORES } from '@n8n/stores';
 import { UserManagementAuthenticationMethod } from '@/Interface';
 import type { IDataObject, WorkflowSettings } from 'n8n-workflow';
 import { defineStore } from 'pinia';
 import { useRootStore } from '@n8n/stores/useRootStore';
-import { useUIStore } from './ui.store';
-import { useUsersStore } from './users.store';
-import { useVersionsStore } from './versions.store';
 import { makeRestApiRequest } from '@n8n/rest-api-client';
-import { useToast } from '@/composables/useToast';
-import { useI18n } from '@n8n/i18n';
 import { useLocalStorage } from '@vueuse/core';
 
 export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
-	const i18n = useI18n();
 	const initialized = ref(false);
 	const settings = ref<FrontendSettings>({} as FrontendSettings);
+	const moduleSettings = ref<FrontendModuleSettings>({});
 	const userManagement = ref<IUserManagementSettings>({
 		quota: -1,
 		showSetupOnFirstLoad: false,
@@ -44,8 +38,6 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
 			enabled: false,
 		},
 	});
-	const ldap = ref({ loginLabel: '', loginEnabled: false });
-	const saml = ref({ loginLabel: '', loginEnabled: false });
 	const mfa = ref({ enabled: false });
 	const folders = ref({ enabled: false });
 
@@ -53,6 +45,7 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
 	const saveDataSuccessExecution = ref<WorkflowSettings.SaveDataExecution>('all');
 	const saveManualExecutions = ref(false);
 	const saveDataProgressExecution = ref(false);
+	const isMFAEnforced = ref(false);
 
 	const isDocker = computed(() => settings.value?.isDocker ?? false);
 
@@ -71,11 +64,13 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
 		secureCookie: settings.value.authCookie.secure,
 	}));
 
-	const isEnterpriseFeatureEnabled = computed(() => settings.value.enterprise);
+	const isEnterpriseFeatureEnabled = computed(() => settings.value.enterprise ?? {});
 
 	const nodeJsVersion = computed(() => settings.value.nodeJsVersion);
 
 	const concurrency = computed(() => settings.value.concurrency);
+
+	const isNativePythonRunnerEnabled = computed(() => settings.value.isNativePythonRunnerEnabled);
 
 	const isConcurrencyEnabled = computed(() => concurrency.value !== -1);
 
@@ -89,12 +84,6 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
 
 	const publicApiPath = computed(() => api.value.path);
 
-	const isLdapLoginEnabled = computed(() => ldap.value.loginEnabled);
-
-	const ldapLoginLabel = computed(() => ldap.value.loginLabel);
-
-	const isSamlLoginEnabled = computed(() => saml.value.loginEnabled);
-
 	const isAiAssistantEnabled = computed(() => settings.value.aiAssistant?.enabled);
 
 	const isAskAiEnabled = computed(() => settings.value.askAi?.enabled);
@@ -104,6 +93,12 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
 	const deploymentType = computed(() => settings.value.deployment?.type || 'default');
 
 	const isCloudDeployment = computed(() => settings.value.deployment?.type === 'cloud');
+
+	const activeModules = computed(() => settings.value.activeModules);
+
+	const isModuleActive = (moduleName: string) => {
+		return activeModules.value?.includes(moduleName);
+	};
 
 	const partialExecutionVersion = computed<1 | 2>(() => {
 		const defaultVersion = settings.value.partialExecution?.version ?? 1;
@@ -142,9 +137,15 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
 		() => false,
 	);
 
+	const isMFAEnforcementLicensed = computed(() => {
+		return settings.value.enterprise?.mfaEnforcement ?? false;
+	});
+
 	const isMfaFeatureEnabled = computed(() => mfa.value.enabled);
 
 	const isFoldersFeatureEnabled = computed(() => folders.value.enabled);
+
+	const isDataStoreFeatureEnabled = computed(() => isModuleActive('data-table'));
 
 	const areTagsEnabled = computed(() =>
 		settings.value.workflowTagsDisabled !== undefined ? !settings.value.workflowTagsDisabled : true,
@@ -179,10 +180,6 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
 		() => settings.value.workflowCallerPolicyDefaultOption,
 	);
 
-	const isDefaultAuthenticationSaml = computed(
-		() => userManagement.value.authenticationMethod === UserManagementAuthenticationMethod.Saml,
-	);
-
 	const permanentlyDismissedBanners = computed(() => settings.value.banners?.dismissed ?? []);
 
 	// const isBelowUserQuota = computed(
@@ -191,11 +188,13 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
 	// 		userManagement.value.quota > useUsersStore().allUsers.length,
 	// );
 	// CUSTOM PATCH
-	const isBelowUserQuota = computed((): boolean => true);
+	// const isBelowUserQuota = computed((): boolean => true);
 
-	const isCommunityPlan = computed(() => planName.value.toLowerCase() === 'community');
+	// const isCommunityPlan = computed(() => planName.value.toLowerCase() === 'community');
+	const isCommunityPlan = false;
 
-	const isDevRelease = computed(() => settings.value.releaseChannel === 'dev');
+	// const isDevRelease = computed(() => settings.value.releaseChannel === 'dev');
+	const isDevRelease = false;
 
 	const setSettings = (newSettings: FrontendSettings) => {
 		settings.value = newSettings;
@@ -205,21 +204,9 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
 				!!settings.value.userManagement.showSetupOnFirstLoad;
 		}
 		api.value = settings.value.publicApi;
-		if (settings.value.sso?.ldap) {
-			ldap.value.loginEnabled = settings.value.sso.ldap.loginEnabled;
-			ldap.value.loginLabel = settings.value.sso.ldap.loginLabel;
-		}
-		if (settings.value.sso?.saml) {
-			saml.value.loginEnabled = settings.value.sso.saml.loginEnabled;
-			saml.value.loginLabel = settings.value.sso.saml.loginLabel;
-		}
-
 		mfa.value.enabled = settings.value.mfa?.enabled;
-		folders.value.enabled = settings.value.folders?.enabled;
-
-		if (settings.value.enterprise?.showNonProdBanner) {
-			useUIStore().pushBannerToStack('NON_PRODUCTION_LICENSE');
-		}
+		// folders.value.enabled = settings.value.folders?.enabled;
+		folders.value.enabled = true;
 
 		if (settings.value.versionCli) {
 			useRootStore().setVersionCli(settings.value.versionCli);
@@ -234,11 +221,6 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
 				document.write(INSECURE_CONNECTION_WARNING);
 				return;
 			}
-		}
-
-		const isV1BannerDismissedPermanently = (settings.value.banners?.dismissed || []).includes('V1');
-		if (!isV1BannerDismissedPermanently && settings.value.versionCli.startsWith('1.')) {
-			useUIStore().pushBannerToStack('V1');
 		}
 	};
 
@@ -275,6 +257,8 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
 		setSaveDataProgressExecution(fetchedSettings.saveExecutionProgress);
 		setSaveManualExecutions(fetchedSettings.saveManualExecutions);
 
+		isMFAEnforced.value = settings.value.mfa?.enforced ?? false;
+
 		rootStore.setUrlBaseWebhook(fetchedSettings.urlBaseWebhook);
 		rootStore.setUrlBaseEditor(fetchedSettings.urlBaseEditor);
 		rootStore.setEndpointForm(fetchedSettings.endpointForm);
@@ -283,6 +267,8 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
 		rootStore.setEndpointWebhook(fetchedSettings.endpointWebhook);
 		rootStore.setEndpointWebhookTest(fetchedSettings.endpointWebhookTest);
 		rootStore.setEndpointWebhookWaiting(fetchedSettings.endpointWebhookWaiting);
+		rootStore.setEndpointMcp(fetchedSettings.endpointMcp);
+		rootStore.setEndpointMcpTest(fetchedSettings.endpointMcpTest);
 		rootStore.setTimezone(fetchedSettings.timezone);
 		rootStore.setExecutionTimeout(fetchedSettings.executionTimeout);
 		rootStore.setMaxExecutionTimeout(fetchedSettings.maxExecutionTimeout);
@@ -291,11 +277,10 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
 		rootStore.setN8nMetadata(fetchedSettings.n8nMetadata || {});
 		rootStore.setDefaultLocale(fetchedSettings.defaultLocale);
 		rootStore.setBinaryDataMode(fetchedSettings.binaryDataMode);
-		useVersionsStore().setVersionNotificationSettings(fetchedSettings.versionNotifications);
 
-		if (fetchedSettings.telemetry.enabled) {
-			void eventsApi.sessionStarted(rootStore.restApiContext);
-		}
+		// if (fetchedSettings.telemetry.enabled) {
+		// 	void eventsApi.sessionStarted(rootStore.restApiContext);
+		// }
 	};
 
 	const initialize = async () => {
@@ -303,21 +288,9 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
 			return;
 		}
 
-		const { showToast } = useToast();
-		try {
-			await getSettings();
+		await getSettings();
 
-			initialized.value = true;
-		} catch (e) {
-			showToast({
-				title: i18n.baseText('startupError'),
-				message: i18n.baseText('startupError.message'),
-				type: 'error',
-				duration: 0,
-			});
-
-			throw e;
-		}
+		initialized.value = true;
 	};
 
 	const stopShowingSetupPage = () => {
@@ -334,48 +307,10 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
 		};
 	};
 
-	const submitContactInfo = async (email: string) => {
-		try {
-			const usersStore = useUsersStore();
-			return await promptsApi.submitContactInfo(
-				settings.value.instanceId,
-				usersStore.currentUserId || '',
-				email,
-			);
-		} catch (error) {
-			return;
-		}
-	};
-
 	const testTemplatesEndpoint = async () => {
 		const timeout = new Promise((_, reject) => setTimeout(() => reject(), 2000));
 		await Promise.race([testHealthEndpoint(templatesHost.value), timeout]);
 		templatesEndpointHealthy.value = true;
-	};
-
-	const getLdapConfig = async () => {
-		const rootStore = useRootStore();
-		return await ldapApi.getLdapConfig(rootStore.restApiContext);
-	};
-
-	const getLdapSynchronizations = async (pagination: { page: number }) => {
-		const rootStore = useRootStore();
-		return await ldapApi.getLdapSynchronizations(rootStore.restApiContext, pagination);
-	};
-
-	const testLdapConnection = async () => {
-		const rootStore = useRootStore();
-		return await ldapApi.testLdapConnection(rootStore.restApiContext);
-	};
-
-	const updateLdapConfig = async (ldapConfig: LdapConfig) => {
-		const rootStore = useRootStore();
-		return await ldapApi.updateLdapConfig(rootStore.restApiContext, ldapConfig);
-	};
-
-	const runLdapSync = async (data: IDataObject) => {
-		const rootStore = useRootStore();
-		return await ldapApi.runLdapSync(rootStore.restApiContext, data);
 	};
 
 	const getTimezones = async (): Promise<IDataObject> => {
@@ -387,22 +322,16 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
 		settings.value = {} as FrontendSettings;
 	};
 
-	/**
-	 * (Experimental) Minimum zoom level of the canvas to render node settings in place of nodes, without opening NDV
-	 */
-	const experimental__minZoomNodeSettingsInCanvas = useLocalStorage(
-		LOCAL_STORAGE_EXPERIMENTAL_MIN_ZOOM_NODE_SETTINGS_IN_CANVAS,
-		0,
-		{ writeDefaults: false },
-	);
+	const getModuleSettings = async () => {
+		const fetched = await moduleSettingsApi.getModuleSettings(useRootStore().restApiContext);
+		moduleSettings.value = fetched;
+	};
 
 	return {
 		settings,
 		userManagement,
 		templatesEndpointHealthy,
 		api,
-		ldap,
-		saml,
 		mfa,
 		isDocker,
 		isDevRelease,
@@ -415,15 +344,13 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
 		security,
 		nodeJsVersion,
 		concurrency,
+		isNativePythonRunnerEnabled,
 		isConcurrencyEnabled,
 		isPublicApiEnabled,
 		isSwaggerUIEnabled,
 		isPreviewMode,
 		publicApiLatestVersion,
 		publicApiPath,
-		isLdapLoginEnabled,
-		ldapLoginLabel,
-		isSamlLoginEnabled,
 		showSetupPage,
 		deploymentType,
 		isCloudDeployment,
@@ -447,10 +374,8 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
 		isQueueModeEnabled,
 		isMultiMain,
 		isWorkerViewAvailable,
-		isDefaultAuthenticationSaml,
 		workflowCallerPolicyDefaultOption,
 		permanentlyDismissedBanners,
-		isBelowUserQuota,
 		saveDataErrorExecution,
 		saveDataSuccessExecution,
 		saveManualExecutions,
@@ -459,21 +384,21 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
 		isAskAiEnabled,
 		isAiCreditsEnabled,
 		aiCreditsQuota,
-		experimental__minZoomNodeSettingsInCanvas,
+		partialExecutionVersion,
 		reset,
-		testLdapConnection,
-		getLdapConfig,
-		getLdapSynchronizations,
-		updateLdapConfig,
-		runLdapSync,
 		getTimezones,
 		testTemplatesEndpoint,
-		submitContactInfo,
 		disableTemplates,
 		stopShowingSetupPage,
 		getSettings,
 		setSettings,
 		initialize,
-		partialExecutionVersion,
+		getModuleSettings,
+		moduleSettings,
+		isMFAEnforcementLicensed,
+		isMFAEnforced,
+		activeModules,
+		isModuleActive,
+		isDataStoreFeatureEnabled,
 	};
 });

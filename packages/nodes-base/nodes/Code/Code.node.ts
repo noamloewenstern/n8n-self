@@ -1,8 +1,10 @@
-import { TaskRunnersConfig } from '@n8n/config';
+/* eslint-disable n8n-nodes-base/node-execute-block-wrong-error-thrown */
+import { NodesConfig, TaskRunnersConfig } from '@n8n/config';
 import { Container } from '@n8n/di';
 import set from 'lodash/set';
 import {
 	NodeConnectionTypes,
+	UserError,
 	type CodeExecutionMode,
 	type CodeNodeEditorLanguage,
 	type IExecuteFunctions,
@@ -11,15 +13,27 @@ import {
 	type INodeTypeDescription,
 } from 'n8n-workflow';
 
+type CodeNodeLanguageOption = CodeNodeEditorLanguage | 'pythonNative';
+
 import { javascriptCodeDescription } from './descriptions/JavascriptCodeDescription';
 import { pythonCodeDescription } from './descriptions/PythonCodeDescription';
 import { JavaScriptSandbox } from './JavaScriptSandbox';
 import { JsTaskRunnerSandbox } from './JsTaskRunnerSandbox';
+import { NativePythonWithoutRunnerError } from './native-python-without-runner.error';
 import { PythonSandbox } from './PythonSandbox';
+import { PythonTaskRunnerSandbox } from './PythonTaskRunnerSandbox';
 import { getSandboxContext } from './Sandbox';
 import { addPostExecutionWarning, standardizeOutput } from './utils';
 
 const { CODE_ENABLE_STDOUT } = process.env;
+
+class PythonDisabledError extends UserError {
+	constructor() {
+		super(
+			'This instance disallows Python execution because it has the environment variable `N8N_PYTHON_ENABLED` set to `false`. To restore Python execution, remove this environment variable or set it to `true` and restart the instance.',
+		);
+	}
+}
 
 export class Code implements INodeType {
 	description: INodeTypeDescription = {
@@ -70,10 +84,17 @@ export class Code implements INodeType {
 					{
 						name: 'JavaScript',
 						value: 'javaScript',
+						action: 'Code in JavaScript',
 					},
 					{
 						name: 'Python (Beta)',
 						value: 'python',
+						action: 'Code in Python (Beta)',
+					},
+					{
+						name: 'Python (Native) (Beta)',
+						value: 'pythonNative',
+						action: 'Code in Python (Native) (Beta)',
 					},
 				],
 				default: 'javaScript',
@@ -96,19 +117,25 @@ export class Code implements INodeType {
 	};
 
 	async execute(this: IExecuteFunctions) {
+		const node = this.getNode();
+		const language: CodeNodeLanguageOption =
+			node.typeVersion === 2
+				? (this.getNodeParameter('language', 0) as CodeNodeLanguageOption)
+				: 'javaScript';
+
+		if (language === 'python' && !Container.get(NodesConfig).pythonEnabled) {
+			throw new PythonDisabledError();
+		}
+
 		const runnersConfig = Container.get(TaskRunnersConfig);
+		const isRunnerEnabled = runnersConfig.enabled;
 
 		const nodeMode = this.getNodeParameter('mode', 0) as CodeExecutionMode;
 		const workflowMode = this.getMode();
+		const codeParameterName =
+			language === 'python' || language === 'pythonNative' ? 'pythonCode' : 'jsCode';
 
-		const node = this.getNode();
-		const language: CodeNodeEditorLanguage =
-			node.typeVersion === 2
-				? (this.getNodeParameter('language', 0) as CodeNodeEditorLanguage)
-				: 'javaScript';
-		const codeParameterName = language === 'python' ? 'pythonCode' : 'jsCode';
-
-		if (runnersConfig.enabled && language === 'javaScript') {
+		if (language === 'javaScript' && isRunnerEnabled) {
 			const code = this.getNodeParameter(codeParameterName, 0) as string;
 			const sandbox = new JsTaskRunnerSandbox(code, nodeMode, workflowMode, this);
 			const numInputItems = this.getInputData().length;
@@ -116,6 +143,15 @@ export class Code implements INodeType {
 			return nodeMode === 'runOnceForAllItems'
 				? [await sandbox.runCodeAllItems()]
 				: [await sandbox.runCodeForEachItem(numInputItems)];
+		}
+
+		if (language === 'pythonNative' && !isRunnerEnabled) throw new NativePythonWithoutRunnerError();
+
+		if (language === 'pythonNative') {
+			const code = this.getNodeParameter(codeParameterName, 0) as string;
+			const sandbox = new PythonTaskRunnerSandbox(code, nodeMode, workflowMode, this);
+
+			return [await sandbox.runUsingIncomingItems()];
 		}
 
 		const getSandbox = (index = 0) => {

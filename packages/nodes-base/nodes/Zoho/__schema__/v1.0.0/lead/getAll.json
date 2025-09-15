@@ -45,6 +45,9 @@
         "$layout_id": {
             "type": "object",
             "properties": {
+                "display_label": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -108,20 +111,12 @@
                 }
             }
         },
-        "Tag": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "type": "string"
-                    },
-                    "name": {
-                        "type": "string"
-                    }
-                }
-            }
+        "Unsubscribed_Mode": {
+            "type": "null"
+        },
+        "Unsubscribed_Time": {
+            "type": "null"
         }
     },
-    "version": 3
+    "version": 6
 }

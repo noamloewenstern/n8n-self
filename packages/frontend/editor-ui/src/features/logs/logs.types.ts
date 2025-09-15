@@ -2,23 +2,22 @@ import type { LOG_DETAILS_PANEL_STATE, LOGS_PANEL_STATE } from '@/features/logs/
 import type { INodeUi, LlmTokenUsageData } from '@/Interface';
 import type { IRunExecutionData, ITaskData, Workflow } from 'n8n-workflow';
 
-export interface LogEntry {
+export type LogEntry = {
 	parent?: LogEntry;
 	node: INodeUi;
 	id: string;
 	children: LogEntry[];
-	depth: number;
 	runIndex: number;
-	runData: ITaskData;
+	runData: ITaskData | undefined;
 	consumedTokens: LlmTokenUsageData;
 	workflow: Workflow;
 	executionId: string;
 	execution: IRunExecutionData;
-}
+};
 
 export interface LogTreeCreationContext {
 	parent: LogEntry | undefined;
-	depth: number;
+	ancestorRunIndexes: number[];
 	workflow: Workflow;
 	executionId: string;
 	data: IRunExecutionData;
@@ -34,7 +33,7 @@ export interface LatestNodeInfo {
 
 export type LogEntrySelection =
 	| { type: 'initial' }
-	| { type: 'selected'; id: string }
+	| { type: 'selected'; entry: LogEntry }
 	| { type: 'none' };
 
 export type LogsPanelState = (typeof LOGS_PANEL_STATE)[keyof typeof LOGS_PANEL_STATE];

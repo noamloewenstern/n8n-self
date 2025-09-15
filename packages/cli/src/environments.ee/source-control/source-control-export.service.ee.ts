@@ -10,6 +10,7 @@ import {
 	WorkflowRepository,
 } from '@n8n/db';
 import { Service } from '@n8n/di';
+import { PROJECT_OWNER_ROLE_SLUG } from '@n8n/permissions';
 // eslint-disable-next-line n8n-local-rules/misplaced-n8n-typeorm-import
 import { In } from '@n8n/typeorm';
 import { rmSync } from 'fs';
@@ -17,8 +18,6 @@ import { Credentials, InstanceSettings } from 'n8n-core';
 import { UnexpectedError, type ICredentialDataDecryptedObject } from 'n8n-workflow';
 import { writeFile as fsWriteFile, rm as fsRm } from 'node:fs/promises';
 import path from 'path';
-
-import { formatWorkflow } from '@/workflows/workflow.formatter';
 
 import {
 	SOURCE_CONTROL_CREDENTIAL_EXPORT_FOLDER,
@@ -40,9 +39,11 @@ import { SourceControlScopedService } from './source-control-scoped.service';
 import type { ExportResult } from './types/export-result';
 import type { ExportableCredential } from './types/exportable-credential';
 import type { ExportableWorkflow } from './types/exportable-workflow';
-import type { ResourceOwner } from './types/resource-owner';
+import type { RemoteResourceOwner } from './types/resource-owner';
 import type { SourceControlContext } from './types/source-control-context';
 import { VariablesService } from '../variables/variables.service.ee';
+
+import { formatWorkflow } from '@/workflows/workflow.formatter';
 
 @Service()
 export class SourceControlExportService {
@@ -99,7 +100,7 @@ export class SourceControlExportService {
 
 	private async writeExportableWorkflowsToExportFolder(
 		workflowsToBeExported: IWorkflowDb[],
-		owners: Record<string, ResourceOwner>,
+		owners: Record<string, RemoteResourceOwner>,
 	) {
 		await Promise.all(
 			workflowsToBeExported.map(async (e) => {
@@ -133,7 +134,7 @@ export class SourceControlExportService {
 			});
 
 			// determine owner of each workflow to be exported
-			const owners: Record<string, ResourceOwner> = {};
+			const owners: Record<string, RemoteResourceOwner> = {};
 			sharedWorkflows.forEach((sharedWorkflow) => {
 				const project = sharedWorkflow.project;
 
@@ -145,7 +146,7 @@ export class SourceControlExportService {
 
 				if (project.type === 'personal') {
 					const ownerRelation = project.projectRelations.find(
-						(pr) => pr.role === 'project:personalOwner',
+						(pr) => pr.role.slug === PROJECT_OWNER_ROLE_SLUG,
 					);
 					if (!ownerRelation) {
 						throw new UnexpectedError(
@@ -154,6 +155,8 @@ export class SourceControlExportService {
 					}
 					owners[sharedWorkflow.workflowId] = {
 						type: 'personal',
+						projectId: project.id,
+						projectName: project.name,
 						personalEmail: ownerRelation.user.email,
 					};
 				} else if (project.type === 'team') {
@@ -213,6 +216,7 @@ export class SourceControlExportService {
 				],
 			};
 		} catch (error) {
+			this.logger.error('Failed to export variables to work folder', { error });
 			throw new UnexpectedError('Failed to export variables to work folder', {
 				cause: error,
 			});
@@ -248,7 +252,7 @@ export class SourceControlExportService {
 			}
 
 			const allowedProjects =
-				await this.sourceControlScopedService.getAdminProjectsFromContext(context);
+				await this.sourceControlScopedService.getAuthorizedProjectsFromContext(context);
 
 			const fileName = getFoldersPath(this.gitFolder);
 
@@ -256,12 +260,11 @@ export class SourceControlExportService {
 
 			// keep all folders that are not accessible by the current user
 			// if allowedProjects is undefined, all folders are accessible by the current user
-			const foldersToKeepUnchanged =
-				allowedProjects === undefined
-					? []
-					: existingFolders.folders.filter((folder) => {
-							return !allowedProjects.some((project) => project.id === folder.homeProjectId);
-						});
+			const foldersToKeepUnchanged = context.hasAccessToAllProjects()
+				? existingFolders.folders
+				: existingFolders.folders.filter((folder) => {
+						return !allowedProjects.some((project) => project.id === folder.homeProjectId);
+					});
 
 			const newFolders = foldersToKeepUnchanged.concat(
 				...folders.map((f) => ({
@@ -295,6 +298,7 @@ export class SourceControlExportService {
 				],
 			};
 		} catch (error) {
+			this.logger.error('Failed to export folders to work folder', { error });
 			throw new UnexpectedError('Failed to export folders to work folder', { cause: error });
 		}
 	}
@@ -354,7 +358,8 @@ export class SourceControlExportService {
 				],
 			};
 		} catch (error) {
-			throw new UnexpectedError('Failed to export variables to work folder', { cause: error });
+			this.logger.error('Failed to export tags to work folder', { error });
+			throw new UnexpectedError('Failed to export tags to work folder', { cause: error });
 		}
 	}
 
@@ -402,14 +407,16 @@ export class SourceControlExportService {
 					const { name, type, data, id } = sharing.credentials;
 					const credentials = new Credentials({ id, name }, type, data);
 
-					let owner: ResourceOwner | null = null;
+					let owner: RemoteResourceOwner | null = null;
 					if (sharing.project.type === 'personal') {
 						const ownerRelation = sharing.project.projectRelations.find(
-							(pr) => pr.role === 'project:personalOwner',
+							(pr) => pr.role.slug === PROJECT_OWNER_ROLE_SLUG,
 						);
 						if (ownerRelation) {
 							owner = {
 								type: 'personal',
+								projectId: sharing.project.id,
+								projectName: sharing.project.name,
 								personalEmail: ownerRelation.user.email,
 							};
 						}
@@ -453,6 +460,7 @@ export class SourceControlExportService {
 				missingIds,
 			};
 		} catch (error) {
+			this.logger.error('Failed to export credentials to work folder', { error });
 			throw new UnexpectedError('Failed to export credentials to work folder', { cause: error });
 		}
 	}

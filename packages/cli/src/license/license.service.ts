@@ -122,6 +122,8 @@ export class LicenseService {
 	}
 
 	async renewLicense() {
+		if (this.license.getPlanName() === 'Community') return; // unlicensed, nothing to renew
+
 		try {
 			await this.license.renew();
 		} catch (e) {

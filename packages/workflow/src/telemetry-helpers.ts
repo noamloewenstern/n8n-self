@@ -1,8 +1,11 @@
 import {
 	AGENT_LANGCHAIN_NODE_TYPE,
+	AGENT_TOOL_LANGCHAIN_NODE_TYPE,
 	AI_TRANSFORM_NODE_TYPE,
 	CHAIN_LLM_LANGCHAIN_NODE_TYPE,
 	CHAIN_SUMMARIZATION_LANGCHAIN_NODE_TYPE,
+	CHAT_TRIGGER_NODE_TYPE,
+	CODE_NODE_TYPE,
 	EVALUATION_NODE_TYPE,
 	EVALUATION_TRIGGER_NODE_TYPE,
 	EXECUTE_WORKFLOW_NODE_TYPE,
@@ -19,7 +22,7 @@ import {
 	WEBHOOK_NODE_TYPE,
 	WORKFLOW_TOOL_LANGCHAIN_NODE_TYPE,
 } from './constants';
-import { ApplicationError } from './errors/application.error';
+import { ApplicationError } from '@n8n/errors';
 import type { NodeApiError } from './errors/node-api.error';
 import type {
 	IConnection,
@@ -34,9 +37,12 @@ import type {
 	IRunData,
 	ITaskData,
 	IRun,
+	INodeParameterResourceLocator,
 } from './interfaces';
+import { NodeConnectionTypes } from './interfaces';
 import { getNodeParameters } from './node-helpers';
 import { jsonParse } from './utils';
+import { DEFAULT_EVALUATION_METRIC } from './evaluation-helpers';
 
 const isNodeApiError = (error: unknown): error is NodeApiError =>
 	typeof error === 'object' && error !== null && 'name' in error && error?.name === 'NodeApiError';
@@ -251,7 +257,21 @@ export function generateNodesGraph(
 		if (node.type === AI_TRANSFORM_NODE_TYPE && options?.isCloudDeployment) {
 			nodeItem.prompts = { instructions: node.parameters.instructions as string };
 		} else if (node.type === AGENT_LANGCHAIN_NODE_TYPE) {
-			nodeItem.agent = (node.parameters.agent as string) ?? 'conversationalAgent';
+			nodeItem.agent = (node.parameters.agent as string) ?? 'toolsAgent';
+
+			if (node.typeVersion >= 2.1) {
+				const options = node.parameters?.options;
+				if (
+					typeof options === 'object' &&
+					options &&
+					'enableStreaming' in options &&
+					options.enableStreaming === false
+				) {
+					nodeItem.is_streaming = false;
+				} else {
+					nodeItem.is_streaming = true;
+				}
+			}
 		} else if (node.type === MERGE_NODE_TYPE) {
 			nodeItem.operation = node.parameters.mode as string;
 
@@ -363,6 +383,24 @@ export function generateNodesGraph(
 			}
 		} else if (node.type === WEBHOOK_NODE_TYPE) {
 			webhookNodeNames.push(node.name);
+			const responseMode = node.parameters?.responseMode;
+			nodeItem.response_mode = typeof responseMode === 'string' ? responseMode : 'onReceived';
+		} else if (node.type === CHAT_TRIGGER_NODE_TYPE) {
+			// Capture streaming response mode parameter
+			const options = node.parameters?.options;
+			if (
+				typeof options === 'object' &&
+				options &&
+				'responseMode' in options &&
+				typeof options.responseMode === 'string'
+			) {
+				nodeItem.response_mode = options.responseMode;
+			}
+			// Capture public chat setting
+			const isPublic = node.parameters?.public;
+			if (typeof isPublic === 'boolean') {
+				nodeItem.public_chat = isPublic;
+			}
 		} else if (
 			node.type === EXECUTE_WORKFLOW_NODE_TYPE ||
 			node.type === WORKFLOW_TOOL_LANGCHAIN_NODE_TYPE
@@ -377,11 +415,28 @@ export function generateNodesGraph(
 			options?.isCloudDeployment &&
 			node.parameters?.operation === 'setMetrics'
 		) {
-			const metrics = node.parameters?.metrics as IDataObject;
+			const metrics = node.parameters?.metrics as IDataObject | undefined;
 
-			nodeItem.metric_names = (metrics.assignments as Array<{ name: string }> | undefined)?.map(
-				(metric: { name: string }) => metric.name,
-			);
+			// If metrics are not defined, it means the node is using preconfigured metric
+			if (!metrics) {
+				const predefinedMetricKey =
+					(node.parameters?.metric as string | undefined) ?? DEFAULT_EVALUATION_METRIC;
+				nodeItem.metric_names = [predefinedMetricKey];
+			} else {
+				nodeItem.metric_names = (metrics.assignments as Array<{ name: string }> | undefined)?.map(
+					(metric: { name: string }) => metric.name,
+				);
+			}
+		} else if (node.type === CODE_NODE_TYPE) {
+			const { language } = node.parameters;
+			nodeItem.language =
+				language === undefined
+					? 'javascript'
+					: language === 'python'
+						? 'python'
+						: language === 'pythonNative'
+							? 'pythonNative'
+							: 'unknown';
 		} else {
 			try {
 				const nodeType = nodeTypes.getByNameAndVersion(node.type, node.typeVersion);
@@ -409,7 +464,13 @@ export function generateNodesGraph(
 					}
 				}
 			} catch (e: unknown) {
-				if (!(e instanceof Error && e.message.includes('Unrecognized node type'))) {
+				if (
+					!(
+						e instanceof Error &&
+						typeof e.message === 'string' &&
+						e.message.includes('Unrecognized node type')
+					)
+				) {
 					throw e;
 				}
 			}
@@ -421,7 +482,7 @@ export function generateNodesGraph(
 					(((node.parameters?.messages as IDataObject) ?? {}).values as IDataObject[]) ?? [];
 			}
 
-			if (node.type === AGENT_LANGCHAIN_NODE_TYPE) {
+			if (node.type === AGENT_LANGCHAIN_NODE_TYPE || node.type === AGENT_TOOL_LANGCHAIN_NODE_TYPE) {
 				const prompts: IDataObject = {};
 
 				if (node.parameters?.text) {
@@ -603,4 +664,132 @@ export function resolveAIMetrics(nodes: INode[], nodeTypes: INodeTypes): FromAIC
 		fromAIOverrideCount,
 		fromAIExpressionCount,
 	};
+}
+
+export type VectorStoreMetrics = {
+	insertedIntoVectorStore: boolean;
+	queriedDataFromVectorStore: boolean;
+};
+
+export function resolveVectorStoreMetrics(
+	nodes: INode[],
+	nodeTypes: INodeTypes,
+	run: IRun,
+): VectorStoreMetrics | {} {
+	const resolvedNodes = nodes
+		.map((x) => [x, nodeTypes.getByNameAndVersion(x.type, x.typeVersion)] as const)
+		.filter((x) => !!x[1]?.description);
+
+	const vectorStores = resolvedNodes.filter(
+		(x) =>
+			x[1].description.codex?.categories?.includes('AI') &&
+			x[1].description.codex?.subcategories?.AI?.includes('Vector Stores'),
+	);
+
+	if (vectorStores.length === 0) return {};
+
+	const runData = run?.data?.resultData?.runData;
+	const succeededVectorStores = vectorStores.filter((x) =>
+		runData?.[x[0].name]?.some((execution) => execution.executionStatus === 'success'),
+	);
+
+	const insertingVectorStores = succeededVectorStores.filter(
+		(x) => x[0].parameters?.mode === 'insert',
+	);
+	const retrievingVectorStores = succeededVectorStores.filter((x) =>
+		['retrieve-as-tool', 'retrieve', 'load'].find((y) => y === x[0].parameters?.mode),
+	);
+
+	return {
+		insertedIntoVectorStore: insertingVectorStores.length > 0,
+		queriedDataFromVectorStore: retrievingVectorStores.length > 0,
+	};
+}
+
+type AgentNodeStructuredOutputErrorInfo = {
+	output_parser_fail_reason?: string;
+	model_name?: string;
+	num_tools?: number;
+};
+
+/**
+ * Extract additional debug information if the last executed node was an agent node
+ */
+export function extractLastExecutedNodeStructuredOutputErrorInfo(
+	workflow: IWorkflowBase,
+	nodeTypes: INodeTypes,
+	runData: IRun,
+): AgentNodeStructuredOutputErrorInfo {
+	const info: AgentNodeStructuredOutputErrorInfo = {};
+
+	if (runData?.data.resultData.error && runData.data.resultData.lastNodeExecuted) {
+		const lastNode = getNodeTypeForName(workflow, runData.data.resultData.lastNodeExecuted);
+
+		if (lastNode !== undefined) {
+			if (lastNode.type === AGENT_LANGCHAIN_NODE_TYPE && lastNode.parameters.hasOutputParser) {
+				// Add additional debug info for agent node structured output errors
+				const agentOutputError = runData.data.resultData.runData[lastNode.name]?.[0]?.error;
+				if (
+					agentOutputError &&
+					agentOutputError.message === "Model output doesn't fit required format"
+				) {
+					info.output_parser_fail_reason = agentOutputError.context
+						?.outputParserFailReason as string;
+				}
+
+				if (workflow.connections) {
+					// Count connected tools
+					info.num_tools =
+						Object.keys(workflow.connections).filter((node) =>
+							workflow.connections[node]?.[NodeConnectionTypes.AiTool]?.[0]?.some(
+								(connectedNode) => connectedNode.node === lastNode.name,
+							),
+						)?.length ?? 0;
+
+					// Extract model name from the language model node if connected
+					const languageModelNodeName = Object.keys(workflow.connections).find((node) =>
+						workflow.connections[node]?.[NodeConnectionTypes.AiLanguageModel]?.[0]?.some(
+							(connectedNode) => connectedNode.node === lastNode.name,
+						),
+					);
+					if (languageModelNodeName) {
+						const languageModelNode = getNodeTypeForName(workflow, languageModelNodeName);
+						if (languageModelNode) {
+							const nodeType = nodeTypes.getByNameAndVersion(
+								languageModelNode.type,
+								languageModelNode.typeVersion,
+							);
+
+							if (nodeType) {
+								const nodeParameters = getNodeParameters(
+									nodeType.description.properties,
+									languageModelNode.parameters,
+									true,
+									false,
+									languageModelNode,
+									nodeType.description,
+								);
+
+								const modelNameKeys = ['model', 'modelName'] as const;
+								for (const key of modelNameKeys) {
+									if (nodeParameters?.[key]) {
+										info.model_name =
+											typeof nodeParameters[key] === 'string'
+												? nodeParameters[key]
+												: ((nodeParameters[key] as INodeParameterResourceLocator).value as string);
+
+										if (info.model_name) {
+											break;
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return info;
 }

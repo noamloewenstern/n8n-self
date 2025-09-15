@@ -4,15 +4,18 @@
         "active": {
             "type": "boolean"
         },
-        "create_date": {
-            "type": "string"
-        },
-        "display_name": {
-            "type": "string"
-        },
         "id": {
             "type": "integer"
+        },
+        "name": {
+            "type": "string"
+        },
+        "tag_ids": {
+            "type": "array",
+            "items": {
+                "type": "integer"
+            }
         }
     },
-    "version": 4
+    "version": 7
 }

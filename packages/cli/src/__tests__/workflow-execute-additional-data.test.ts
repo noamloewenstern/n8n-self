@@ -1,12 +1,12 @@
+import { mockInstance } from '@n8n/backend-test-utils';
 import { GlobalConfig } from '@n8n/config';
 import type { WorkflowEntity } from '@n8n/db';
-import { ExecutionRepository } from '@n8n/db';
-import { WorkflowRepository } from '@n8n/db';
+import { ExecutionRepository, WorkflowRepository } from '@n8n/db';
 import { Container } from '@n8n/di';
 import { mock } from 'jest-mock-extended';
 import { ExternalSecretsProxy } from 'n8n-core';
-import type { IWorkflowBase } from 'n8n-workflow';
 import type {
+	IWorkflowBase,
 	IExecuteWorkflowInfo,
 	IWorkflowExecuteAdditionalData,
 	ExecuteWorkflowOptions,
@@ -24,12 +24,12 @@ import {
 	SubworkflowPolicyChecker,
 } from '@/executions/pre-execution-checks';
 import { ExternalHooks } from '@/external-hooks';
+import { DataStoreProxyService } from '@/modules/data-table/data-store-proxy.service';
 import { UrlService } from '@/services/url.service';
 import { WorkflowStatisticsService } from '@/services/workflow-statistics.service';
 import { Telemetry } from '@/telemetry';
 import { executeWorkflow, getBase, getRunData } from '@/workflow-execute-additional-data';
 import * as WorkflowHelpers from '@/workflow-helpers';
-import { mockInstance } from '@test/mocking';
 
 const EXECUTION_ID = '123';
 const LAST_NODE_EXECUTED = 'Last node executed';
@@ -99,6 +99,7 @@ describe('WorkflowExecuteAdditionalData', () => {
 	mockInstance(CredentialsPermissionChecker);
 	mockInstance(SubworkflowPolicyChecker);
 	mockInstance(WorkflowStatisticsService);
+	mockInstance(DataStoreProxyService);
 
 	const urlService = mockInstance(UrlService);
 	Container.set(UrlService, urlService);

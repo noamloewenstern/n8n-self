@@ -22,7 +22,7 @@ import { useProjectsStore } from '@/stores/projects.store';
 import { useTelemetry } from '@/composables/useTelemetry';
 import { VIEWS } from '@/constants';
 import { SAMPLE_SUBWORKFLOW_TRIGGER_ID, SAMPLE_SUBWORKFLOW_WORKFLOW } from '@/constants.workflows';
-import type { IWorkflowDataCreate } from '@/Interface';
+import type { WorkflowDataCreate } from '@n8n/rest-api-client/api/workflows';
 import { useDocumentVisibility } from '@/composables/useDocumentVisibility';
 
 export interface Props {
@@ -36,7 +36,7 @@ export interface Props {
 	forceShowExpression?: boolean;
 	parameterIssues?: string[];
 	parameter: INodeProperties;
-	sampleWorkflow?: IWorkflowDataCreate;
+	sampleWorkflow?: WorkflowDataCreate;
 	newResourceLabel?: string;
 }
 
@@ -92,6 +92,7 @@ const {
 	searchFilter,
 	onSearchFilter,
 	getWorkflowName,
+	applyDefaultExecuteWorkflowNodeName,
 	populateNextWorkflowsPage,
 	setWorkflowsResources,
 	reloadWorkflows,
@@ -122,9 +123,9 @@ const getCreateResourceLabel = computed(() => {
 	});
 });
 
-const valueToDisplay = computed<NodeParameterValue>(() => {
+const valueToDisplay = computed<INodeParameterResourceLocator['value']>(() => {
 	if (typeof props.modelValue !== 'object') {
-		return props.modelValue;
+		return props.modelValue ?? '';
 	}
 
 	if (isListMode.value) {
@@ -171,9 +172,13 @@ function onInputChange(workflowId: NodeParameterValue): void {
 }
 
 function onListItemSelected(value: NodeParameterValue) {
-	telemetry.track('User chose sub-workflow', {}, { withPostHog: true });
+	telemetry.track('User chose sub-workflow', {});
 	onInputChange(value);
 	hideDropdown();
+	// we rename defaults here to allow selecting the same workflow to
+	// update the name, as we don't eagerly update a changed workflow name
+	// but rather only react on changed id elsewhere
+	applyDefaultExecuteWorkflowNodeName(value);
 }
 
 function onInputFocus(): void {
@@ -208,9 +213,6 @@ async function refreshCachedWorkflow() {
 	}
 
 	const workflowId = props.modelValue.value;
-	if (workflowId === true) {
-		return;
-	}
 	try {
 		await workflowsStore.fetchWorkflow(`${workflowId}`);
 		onInputChange(workflowId);
@@ -242,6 +244,19 @@ watch(
 	},
 );
 
+watch(
+	() => props.modelValue,
+	(val, old) => {
+		// We update the name only if the actual ID changed
+		// Because eagerly renaming the node when the target sub-workflow
+		// changed name means the workflow becomes unsaved and changed just by
+		// opening the ExecuteWorkflow node referencing the renamed workflow
+		if (old.value !== val.value) {
+			applyDefaultExecuteWorkflowNodeName(val.value);
+		}
+	},
+);
+
 onClickOutside(dropdown, () => {
 	isDropdownVisible.value = false;
 });
@@ -254,14 +269,14 @@ const onAddResourceClicked = async () => {
 		(w) => w.name && new RegExp(workflowName).test(w.name),
 	);
 
-	const workflow: IWorkflowDataCreate = {
+	const workflow: WorkflowDataCreate = {
 		...sampleWorkflow,
 		name: `${workflowName} ${sampleSubWorkflows.length + 1}`,
 	};
 	if (projectId) {
 		workflow.projectId = projectId;
 	}
-	telemetry.track('User clicked create new sub-workflow button', {}, { withPostHog: true });
+	telemetry.track('User clicked create new sub-workflow button', {});
 
 	const newWorkflow = await workflowsStore.createNewWorkflow(workflow);
 	const { href } = router.resolve({
@@ -418,7 +433,7 @@ const onAddResourceClicked = async () => {
 						data-test-id="rlc-open-resource-link"
 					>
 						<n8n-link theme="text" @click.stop="openWorkflow()">
-							<font-awesome-icon icon="external-link-alt" :title="'Open resource link'" />
+							<n8n-icon icon="external-link" :title="'Open resource link'" />
 						</n8n-link>
 					</div>
 				</div>
@@ -428,5 +443,5 @@ const onAddResourceClicked = async () => {
 </template>
 
 <style lang="scss" module>
-@import '@/components/ResourceLocator/resourceLocator.scss';
+@use '@/components/ResourceLocator/resourceLocator.scss';
 </style>

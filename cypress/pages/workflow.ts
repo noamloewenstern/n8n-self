@@ -1,7 +1,7 @@
 import { BasePage } from './base';
 import { NodeCreator } from './features/node-creator';
 import { clickContextMenuAction, getCanvasPane, openContextMenu } from '../composables/workflow';
-import { META_KEY } from '../constants';
+import { CODE_NODE_ACTION, CODE_NODE_NAME, META_KEY } from '../constants';
 import type { OpenContextMenuOptions } from '../types';
 import { getVisibleSelect } from '../utils';
 import { getUniqueWorkflowName } from '../utils/workflowUtils';
@@ -179,6 +179,12 @@ export class WorkflowPage extends BasePage {
 				win.preventNodeViewBeforeUnload = preventNodeViewUnload;
 			});
 		},
+		addInitialCodeNodeToCanvas(opts: { keepNdvOpen: boolean } = { keepNdvOpen: false }) {
+			this.addInitialNodeToCanvas(CODE_NODE_NAME, {
+				action: CODE_NODE_ACTION,
+				keepNdvOpen: opts.keepNdvOpen,
+			});
+		},
 		addInitialNodeToCanvas: (
 			nodeDisplayName: string,
 			opts?: { keepNdvOpen?: boolean; action?: string; isTrigger?: boolean },
@@ -202,6 +208,9 @@ export class WorkflowPage extends BasePage {
 				cy.get('body').type('{esc}');
 			}
 		},
+		addCodeNodeToCanvas(plusButtonClick = true, preventNdvClose?: boolean) {
+			this.addNodeToCanvas(CODE_NODE_NAME, plusButtonClick, preventNdvClose, CODE_NODE_ACTION);
+		},
 		addNodeToCanvas: (
 			nodeDisplayName: string,
 			plusButtonClick = true,
@@ -217,7 +226,7 @@ export class WorkflowPage extends BasePage {
 			cy.get('body').then((body) => {
 				if (body.find('[data-test-id=node-creator]').length > 0) {
 					if (action) {
-						cy.contains(action).click();
+						cy.get('[data-keyboard-nav-type="action"]').contains(action).click();
 					} else {
 						// Select the first action
 						if (body.find('[data-keyboard-nav-type="action"]').length > 0) {
@@ -390,6 +399,9 @@ export class WorkflowPage extends BasePage {
 		hitDisableNodeShortcut: () => {
 			cy.get('body').type('d');
 		},
+		hitOpenAbout: () => {
+			cy.get('body').type(`{alt}{${META_KEY}}o`);
+		},
 		hitCopy: () => {
 			this.actions.hitComboShortcut(`{${META_KEY}}`, 'c');
 		},
@@ -437,7 +449,6 @@ export class WorkflowPage extends BasePage {
 				.click({ force: true });
 		},
 		addSticky: () => {
-			this.getters.nodeCreatorPlusButton().realHover();
 			this.getters.addStickyButton().click();
 		},
 		deleteSticky: () => {

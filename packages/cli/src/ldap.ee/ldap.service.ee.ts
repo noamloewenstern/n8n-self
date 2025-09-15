@@ -1,7 +1,8 @@
 import { Logger } from '@n8n/backend-common';
+import { GlobalConfig } from '@n8n/config';
 import type { LdapConfig } from '@n8n/constants';
 import { LDAP_FEATURE_NAME } from '@n8n/constants';
-import { SettingsRepository } from '@n8n/db';
+import { isValidEmail, SettingsRepository } from '@n8n/db';
 import type { User, RunningMode, SyncStatus } from '@n8n/db';
 import { Service, Container } from '@n8n/di';
 // eslint-disable-next-line n8n-local-rules/misplaced-n8n-typeorm-import
@@ -12,7 +13,6 @@ import { Cipher } from 'n8n-core';
 import { jsonParse, UnexpectedError } from 'n8n-workflow';
 import type { ConnectionOptions } from 'tls';
 
-import config from '@/config';
 import { BadRequestError } from '@/errors/response-errors/bad-request.error';
 import { InternalServerError } from '@/errors/response-errors/internal-server.error';
 import { EventService } from '@/events/event.service';
@@ -37,6 +37,7 @@ import {
 	resolveEntryBinaryAttributes,
 	saveLdapSynchronization,
 	validateLdapConfigurationSchema,
+	getUserByLdapId,
 } from '@/ldap.ee/helpers.ee';
 import {
 	getCurrentAuthenticationMethod,
@@ -45,7 +46,7 @@ import {
 	setCurrentAuthenticationMethod,
 } from '@/sso.ee/sso-helpers';
 
-import { BINARY_AD_ATTRIBUTES, LDAP_LOGIN_ENABLED, LDAP_LOGIN_LABEL } from './constants';
+import { BINARY_AD_ATTRIBUTES } from './constants';
 
 @Service()
 export class LdapService {
@@ -95,7 +96,7 @@ export class LdapService {
 			throw new UnexpectedError(message);
 		}
 
-		if (ldapConfig.loginEnabled && getCurrentAuthenticationMethod() === 'saml') {
+		if (ldapConfig.loginEnabled && ['saml', 'oidc'].includes(getCurrentAuthenticationMethod())) {
 			throw new BadRequestError('LDAP cannot be enabled if SSO in enabled');
 		}
 
@@ -141,24 +142,24 @@ export class LdapService {
 	/** Take the LDAP configuration and set login enabled and login label to the config object */
 	private async setGlobalLdapConfigVariables(ldapConfig: LdapConfig): Promise<void> {
 		await this.setLdapLoginEnabled(ldapConfig.loginEnabled);
-		config.set(LDAP_LOGIN_LABEL, ldapConfig.loginLabel);
+		Container.get(GlobalConfig).sso.ldap.loginLabel = ldapConfig.loginLabel;
 	}
 
 	/** Set the LDAP login enabled to the configuration object */
 	private async setLdapLoginEnabled(enabled: boolean): Promise<void> {
-		if (isEmailCurrentAuthenticationMethod() || isLdapCurrentAuthenticationMethod()) {
-			if (enabled) {
-				config.set(LDAP_LOGIN_ENABLED, true);
-				await setCurrentAuthenticationMethod('ldap');
-			} else if (!enabled) {
-				config.set(LDAP_LOGIN_ENABLED, false);
-				await setCurrentAuthenticationMethod('email');
-			}
-		} else {
+		const currentAuthenticationMethod = getCurrentAuthenticationMethod();
+		if (enabled && !isEmailCurrentAuthenticationMethod() && !isLdapCurrentAuthenticationMethod()) {
 			throw new InternalServerError(
-				`Cannot switch LDAP login enabled state when an authentication method other than email or ldap is active (current: ${getCurrentAuthenticationMethod()})`,
+				`Cannot switch LDAP login enabled state when an authentication method other than email or ldap is active (current: ${currentAuthenticationMethod})`,
 			);
 		}
+
+		Container.get(GlobalConfig).sso.ldap.loginEnabled = enabled;
+
+		const targetAuthenticationMethod =
+			!enabled && currentAuthenticationMethod === 'ldap' ? 'email' : currentAuthenticationMethod;
+
+		await setCurrentAuthenticationMethod(enabled ? 'ldap' : targetAuthenticationMethod);
 	}
 
 	/**
@@ -349,9 +350,25 @@ export class LdapService {
 			localAdUsers,
 		);
 
+		const filteredUsersToCreate = usersToCreate.filter(([id, user]) => {
+			if (!isValidEmail(user.email)) {
+				this.logger.warn(`LDAP - Invalid email format for user ${id}`);
+				return false;
+			}
+			return true;
+		});
+
+		const filteredUsersToUpdate = usersToUpdate.filter(([id, user]) => {
+			if (!isValidEmail(user.email)) {
+				this.logger.warn(`LDAP - Invalid email format for user ${id}`);
+				return false;
+			}
+			return true;
+		});
+
 		this.logger.debug('LDAP - Users to process', {
-			created: usersToCreate.length,
-			updated: usersToUpdate.length,
+			created: filteredUsersToCreate.length,
+			updated: filteredUsersToUpdate.length,
 			disabled: usersToDisable.length,
 		});
 
@@ -361,7 +378,7 @@ export class LdapService {
 
 		try {
 			if (mode === 'live') {
-				await processUsers(usersToCreate, usersToUpdate, usersToDisable);
+				await processUsers(filteredUsersToCreate, filteredUsersToUpdate, usersToDisable);
 			}
 		} catch (error) {
 			if (error instanceof QueryFailedError) {
@@ -373,8 +390,8 @@ export class LdapService {
 		await saveLdapSynchronization({
 			startedAt,
 			endedAt,
-			created: usersToCreate.length,
-			updated: usersToUpdate.length,
+			created: filteredUsersToCreate.length,
+			updated: filteredUsersToUpdate.length,
 			disabled: usersToDisable.length,
 			scanned: adUsers.length,
 			runMode: mode,
@@ -385,7 +402,8 @@ export class LdapService {
 		this.eventService.emit('ldap-general-sync-finished', {
 			type: !this.syncTimer ? 'scheduled' : `manual_${mode}`,
 			succeeded: true,
-			usersSynced: usersToCreate.length + usersToUpdate.length + usersToDisable.length,
+			usersSynced:
+				filteredUsersToCreate.length + filteredUsersToUpdate.length + usersToDisable.length,
 			error: errorMessage,
 		});
 
@@ -487,6 +505,6 @@ export class LdapService {
 		}
 
 		// Retrieve the user again as user's data might have been updated
-		return (await getAuthIdentityByLdapId(ldapId))?.user;
+		return (await getUserByLdapId(ldapId)) ?? undefined;
 	}
 }
