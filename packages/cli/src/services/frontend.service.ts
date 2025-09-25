@@ -129,6 +129,7 @@ export class FrontendService {
 			urlBaseEditor: instanceBaseUrl,
 			binaryDataMode: this.binaryDataConfig.mode,
 			nodeJsVersion: process.version.replace(/^v/, ''),
+			nodeEnv: process.env.NODE_ENV,
 			versionCli: N8N_VERSION,
 			concurrency: this.globalConfig.executions.concurrency.productionLimit,
 			isNativePythonRunnerEnabled:
@@ -201,8 +202,8 @@ export class FrontendService {
 			// hiringBannerEnabled: config.getEnv('hiringBanner.enabled'),
 			hiringBannerEnabled: false,
 			aiAssistant: {
-				// enabled: false,
 				enabled: true,
+				setup: false,
 			},
 			templates: {
 				enabled: this.globalConfig.templates.enabled,
@@ -312,7 +313,6 @@ export class FrontendService {
 				blockFileAccessToN8nFiles: this.securityConfig.blockFileAccessToN8nFiles,
 			},
 			easyAIWorkflowOnboarded: false,
-			partialExecution: this.globalConfig.partialExecutions,
 			folders: {
 				// enabled: false,
 				enabled: true,
@@ -442,6 +442,7 @@ export class FrontendService {
 
 		if (isAiAssistantEnabled) {
 			this.settings.aiAssistant.enabled = isAiAssistantEnabled;
+			this.settings.aiAssistant.setup = !!this.globalConfig.aiAssistant.baseUrl;
 		}
 
 		if (isAskAiEnabled) {

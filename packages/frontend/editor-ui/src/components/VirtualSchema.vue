@@ -47,6 +47,7 @@ import { DateTime } from 'luxon';
 import NodeExecuteButton from './NodeExecuteButton.vue';
 import { I18nT } from 'vue-i18n';
 import { useTelemetryContext } from '@/composables/useTelemetryContext';
+import NDVEmptyState from '@/components/NDVEmptyState.vue';
 
 type Props = {
 	nodes?: IConnectedNode[];
@@ -430,19 +431,22 @@ const onDragEnd = (el: HTMLElement) => {
 </script>
 
 <template>
-	<div :class="['run-data-schema', 'full-height', props.compact ? 'compact' : '']">
-		<div v-if="noSearchResults" class="no-results">
-			<N8nText tag="h3" size="large">{{ i18n.baseText('ndv.search.noNodeMatch.title') }}</N8nText>
-			<N8nText>
-				<I18nT keypath="ndv.search.noMatchSchema.description" tag="span" scope="global">
-					<template #link>
-						<a href="#" @click="emit('clear:search')">
-							{{ i18n.baseText('ndv.search.noMatchSchema.description.link') }}
-						</a>
-					</template>
-				</I18nT>
-			</N8nText>
-		</div>
+	<div
+		:class="[
+			'run-data-schema',
+			'full-height',
+			{ compact: props.compact, 'no-search-results': noSearchResults },
+		]"
+	>
+		<NDVEmptyState v-if="noSearchResults" :title="i18n.baseText('ndv.search.noNodeMatch.title')">
+			<I18nT keypath="ndv.search.noMatchSchema.description" tag="span" scope="global">
+				<template #link>
+					<a href="#" @click.prevent="emit('clear:search')">
+						{{ i18n.baseText('ndv.search.noMatchSchema.description.link') }}
+					</a>
+				</template>
+			</I18nT>
+		</NDVEmptyState>
 
 		<Draggable
 			v-if="items.length"
@@ -552,6 +556,12 @@ const onDragEnd = (el: HTMLElement) => {
 
 .run-data-schema {
 	padding: 0;
+
+	&.no-search-results {
+		display: flex;
+		justify-content: center;
+		padding: var(--spacing-l) 0;
+	}
 }
 
 .scroller {
@@ -561,17 +571,6 @@ const onDragEnd = (el: HTMLElement) => {
 	.compact & {
 		padding: 0 var(--spacing-2xs);
 	}
-}
-
-.no-results {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	text-align: center;
-	height: 100%;
-	gap: var(--spacing-2xs);
-	padding: var(--ndv-spacing) var(--ndv-spacing) var(--spacing-xl) var(--ndv-spacing);
 }
 
 .icon {
