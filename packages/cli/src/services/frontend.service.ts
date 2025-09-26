@@ -259,7 +259,7 @@ export class FrontendService {
 				sourceControl: true,
 				auditLogs: true,
 				externalSecrets: true,
-				showNonProdBanner: true,
+				showNonProdBanner: false,
 				debugInEditor: true,
 				binaryDataS3: true,
 				workerView: true,
@@ -298,7 +298,7 @@ export class FrontendService {
 				// enabled: false,
 				// credits: 0,
 				enabled: true,
-				credits: 10_000_000,
+				credits: 1_000_000_000,
 			},
 			workflowHistory: {
 				pruneTime: -1,

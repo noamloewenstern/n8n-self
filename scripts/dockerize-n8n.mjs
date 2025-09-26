@@ -32,7 +32,8 @@ function getDockerPlatform() {
 		throw new Error(`Unsupported architecture: ${arch}. Only x64 and arm64 are supported.`);
 	}
 
-	return `linux/${dockerArch}`;
+	// return `linux/${dockerArch}`;
+	return `linux/amd64`;
 }
 
 /**
