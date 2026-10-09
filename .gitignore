@@ -39,6 +39,8 @@ CHANGELOG-*.md
 build-storybook.log
 build.log
 tcr-dry.log
+dev-be.log
+dev-fe.log
 .agent-setup/
 .agent-recordings/
 .vitest/
