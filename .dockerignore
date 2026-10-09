@@ -41,3 +41,8 @@
 !packages/quality/efficiency/scale/benchmark/**
 !packages/@n8n/typescript-config
 !packages/@n8n/typescript-config/**
+
+# Secrets never enter a build context (guard; whitelist above already excludes them)
+**/.env*
+**/.claude
+**/.git
