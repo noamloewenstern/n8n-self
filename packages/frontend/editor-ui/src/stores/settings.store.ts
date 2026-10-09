@@ -118,7 +118,9 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
 	const logLevel = computed(() => settings.value.logLevel);
 
 	const isTelemetryEnabled = computed(
-		() => settings.value.telemetry && settings.value.telemetry.enabled,
+		// () => settings.value.telemetry && settings.value.telemetry.enabled,
+		// CUSTOM PATCH
+		() => false,
 	);
 
 	const isMFAEnforcementLicensed = computed(() => {
@@ -166,9 +168,19 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
 
 	const permanentlyDismissedBanners = computed(() => settings.value.banners?.dismissed ?? []);
 
-	const isCommunityPlan = computed(() => planName.value.toLowerCase() === 'community');
+	// const isBelowUserQuota = computed(
+	// 	(): boolean =>
+	// 		userManagement.value.quota === -1 ||
+	// 		userManagement.value.quota > useUsersStore().allUsers.length,
+	// );
+	// CUSTOM PATCH
+	// const isBelowUserQuota = computed((): boolean => true);
 
-	const isDevRelease = computed(() => settings.value.releaseChannel === 'dev');
+	// const isCommunityPlan = computed(() => planName.value.toLowerCase() === 'community');
+	const isCommunityPlan = false;
+
+	// const isDevRelease = computed(() => settings.value.releaseChannel === 'dev');
+	const isDevRelease = false;
 
 	const setSettings = (newSettings: FrontendSettings) => {
 		settings.value = newSettings;
@@ -180,7 +192,8 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
 		}
 		api.value = settings.value.publicApi;
 		mfa.value.enabled = settings.value.mfa?.enabled;
-		folders.value.enabled = settings.value.folders?.enabled;
+		// folders.value.enabled = settings.value.folders?.enabled;
+		folders.value.enabled = true;
 
 		if (settings.value.versionCli) {
 			useRootStore().setVersionCli(settings.value.versionCli);
@@ -252,9 +265,9 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
 		rootStore.setDefaultLocale(fetchedSettings.defaultLocale);
 		rootStore.setBinaryDataMode(fetchedSettings.binaryDataMode);
 
-		if (fetchedSettings.telemetry.enabled) {
-			void eventsApi.sessionStarted(rootStore.restApiContext);
-		}
+		// if (fetchedSettings.telemetry.enabled) {
+		// 	void eventsApi.sessionStarted(rootStore.restApiContext);
+		// }
 	};
 
 	const initialize = async () => {

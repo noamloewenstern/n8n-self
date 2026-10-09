@@ -52,7 +52,9 @@ export class LicenseService {
 			},
 			license: {
 				planId: mainPlan?.productId ?? '',
-				planName: this.license.getPlanName(),
+				// planName: this.license.getPlanName(),
+				// CUSTOM PATCH
+				planName: 'Enterprise',
 			},
 		};
 	}

@@ -297,7 +297,12 @@ export const routes: RouteRecordRaw[] = [
 		},
 		meta: {
 			keepWorkflowAlive: true,
+			// middleware: ['authenticated', 'custom'],
+			// CUSTOM PATCH
 			middleware: ['authenticated'],
+			// middlewareOptions: {
+			// 	custom: () => useEvaluationStore().isFeatureEnabled,
+			// },
 		},
 		children: [
 			{
@@ -511,13 +516,15 @@ export const routes: RouteRecordRaw[] = [
 					settingsView: SettingsUsageAndPlan,
 				},
 				meta: {
-					middleware: ['authenticated', 'custom'],
-					middlewareOptions: {
-						custom: () => {
-							const settingsStore = useSettingsStore();
-							return !settingsStore.settings.hideUsagePage;
-						},
-					},
+					// middleware: ['authenticated', 'custom'],
+					// CUSTOM PATCH
+					middleware: ['authenticated'],
+					// middlewareOptions: {
+					// 	custom: () => {
+					// 		const settingsStore = useSettingsStore();
+					// 		return !settingsStore.settings.hideUsagePage;
+					// 	},
+					// },
 					telemetry: {
 						pageCategory: 'settings',
 						getProperties() {
@@ -691,19 +698,21 @@ export const routes: RouteRecordRaw[] = [
 					settingsView: SettingsCommunityNodesView,
 				},
 				meta: {
-					middleware: ['authenticated', 'rbac', 'custom'],
-					middlewareOptions: {
-						rbac: {
-							scope: ['communityPackage:list', 'communityPackage:update'],
-						},
-						custom: () => {
-							const settingsStore = useSettingsStore();
-							return settingsStore.isCommunityNodesFeatureEnabled;
-						},
-					},
-					telemetry: {
-						pageCategory: 'settings',
-					},
+					// middleware: ['authenticated', 'rbac', 'custom'],
+					// CUSTOM PATCH
+					middleware: ['authenticated', 'rbac'],
+					// middlewareOptions: {
+					// 	rbac: {
+					// 		scope: ['communityPackage:list', 'communityPackage:update'],
+					// 	},
+					// 	custom: () => {
+					// 		const settingsStore = useSettingsStore();
+					// 		return settingsStore.isCommunityNodesFeatureEnabled;
+					// 	},
+					// },
+					// telemetry: {
+					// 	pageCategory: 'settings',
+					// },
 				},
 			},
 			{
@@ -730,17 +739,19 @@ export const routes: RouteRecordRaw[] = [
 			default: SamlOnboarding,
 		},
 		meta: {
-			middleware: ['authenticated', 'custom'],
-			middlewareOptions: {
-				custom: () => {
-					const settingsStore = useSettingsStore();
-					const ssoStore = useSSOStore();
-					return ssoStore.isEnterpriseSamlEnabled && !settingsStore.isCloudDeployment;
-				},
-			},
-			telemetry: {
-				pageCategory: 'auth',
-			},
+			// middleware: ['authenticated', 'custom'],
+			// CUSTOM PATCH
+			middleware: ['authenticated'],
+			// middlewareOptions: {
+			// 	custom: () => {
+			// 		const settingsStore = useSettingsStore();
+			// 		const ssoStore = useSSOStore();
+			// 		return ssoStore.isEnterpriseSamlEnabled && !settingsStore.isCloudDeployment;
+			// 	},
+			// },
+			// telemetry: {
+			// 	pageCategory: 'auth',
+			// },
 		},
 	},
 	...projectsRoutes,

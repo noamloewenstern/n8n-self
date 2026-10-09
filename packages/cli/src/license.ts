@@ -217,8 +217,12 @@ export class License implements LicenseProvider {
 		this.logger.debug('License shut down');
 	}
 
+	// isLicensed(feature: BooleanLicenseFeature) {
+	// 	return this.manager?.hasFeatureEnabled(feature) ?? false;
+	// }
 	isLicensed(feature: BooleanLicenseFeature) {
-		return this.manager?.hasFeatureEnabled(feature) ?? false;
+		// CUSTOM PATCH
+		return true;
 	}
 
 	/** @deprecated Use `LicenseState.isSharingLicensed` instead. */
@@ -413,7 +417,9 @@ export class License implements LicenseProvider {
 	}
 
 	getPlanName(): string {
-		return this.getValue('planName') ?? 'Community';
+		// return this.getValue('planName') ?? 'Community';
+		// CUSTOM PATCH
+		return 'Enterprise';
 	}
 
 	getInfo(): string {

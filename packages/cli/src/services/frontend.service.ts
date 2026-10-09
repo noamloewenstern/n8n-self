@@ -1,7 +1,7 @@
 import type { FrontendSettings, ITelemetrySettings, N8nEnvFeatFlags } from '@n8n/api-types';
 import { LicenseState, Logger, ModuleRegistry } from '@n8n/backend-common';
 import { GlobalConfig, SecurityConfig } from '@n8n/config';
-import { LICENSE_FEATURES } from '@n8n/constants';
+// import { LICENSE_FEATURES } from '@n8n/constants';
 import { Container, Service } from '@n8n/di';
 import { createWriteStream } from 'fs';
 import { mkdir } from 'fs/promises';
@@ -171,11 +171,13 @@ export class FrontendService {
 			},
 			sso: {
 				saml: {
-					loginEnabled: false,
+					// loginEnabled: false,
+					loginEnabled: true,
 					loginLabel: '',
 				},
 				ldap: {
-					loginEnabled: false,
+					// loginEnabled: false,
+					loginEnabled: true,
 					loginLabel: '',
 				},
 				oidc: {
@@ -197,9 +199,10 @@ export class FrontendService {
 			},
 			workflowTagsDisabled: this.globalConfig.tags.disabled,
 			logLevel: this.globalConfig.logging.level,
-			hiringBannerEnabled: this.globalConfig.hiringBanner.enabled,
+			// hiringBannerEnabled: config.getEnv('hiringBanner.enabled'),
+			hiringBannerEnabled: false,
 			aiAssistant: {
-				enabled: false,
+				enabled: true,
 				setup: false,
 			},
 			templates: {
@@ -221,53 +224,81 @@ export class FrontendService {
 				builtIn: process.env.NODE_FUNCTION_ALLOW_BUILTIN?.split(',') ?? undefined,
 				external: process.env.NODE_FUNCTION_ALLOW_EXTERNAL?.split(',') ?? undefined,
 			},
+			// enterprise: {
+			// 	sharing: false,
+			// 	ldap: false,
+			// 	saml: false,
+			// 	logStreaming: false,
+			// 	advancedExecutionFilters: false,
+			// 	variables: false,
+			// 	sourceControl: false,
+			// 	auditLogs: false,
+			// 	externalSecrets: false,
+			// 	showNonProdBanner: false,
+			// 	debugInEditor: false,
+			// 	binaryDataS3: false,
+			// 	workflowHistory: false,
+			// 	workerView: false,
+			// 	advancedPermissions: false,
+			// 	apiKeyScopes: false,
+			// 	projects: {
+			// 		team: {
+			// 			limit: 0,
+			// 		},
+			// 	},
+			// },
 			enterprise: {
-				sharing: false,
+				sharing: true,
 				ldap: false,
 				saml: false,
 				oidc: false,
 				mfaEnforcement: false,
-				logStreaming: false,
-				advancedExecutionFilters: false,
-				variables: false,
-				sourceControl: false,
-				auditLogs: false,
-				externalSecrets: false,
+				logStreaming: true,
+				advancedExecutionFilters: true,
+				variables: true,
+				sourceControl: true,
+				auditLogs: true,
+				externalSecrets: true,
 				showNonProdBanner: false,
-				debugInEditor: false,
-				binaryDataS3: false,
-				workflowHistory: false,
-				workerView: false,
-				advancedPermissions: false,
-				apiKeyScopes: false,
-				workflowDiffs: false,
+				debugInEditor: true,
+				binaryDataS3: true,
+				workerView: true,
+				advancedPermissions: true,
+				apiKeyScopes: true,
+				workflowHistory: true,
+				workflowDiffs: true,
 				projects: {
 					team: {
-						limit: 0,
+						limit: 10_000,
 					},
 				},
 			},
 			mfa: {
-				enabled: false,
+				enabled: true,
 				enforced: false,
 			},
-			hideUsagePage: this.globalConfig.hideUsagePage,
+			// hideUsagePage: this.globalConfig.hideUsagePage,
+			hideUsagePage: false,
 			license: {
 				consumerId: 'unknown',
-				environment: this.globalConfig.license.tenantId === 1 ? 'production' : 'staging',
+				// environment: this.globalConfig.license.tenantId === 1 ? 'production' : 'staging',
+				environment: 'development',
 			},
 			variables: {
-				limit: 0,
+				limit: 10_000,
 			},
 			banners: {
 				dismissed: [],
 			},
 			askAi: {
-				enabled: false,
+				// enabled: false,
+				enabled: true,
 			},
 			aiCredits: {
-				enabled: false,
-				credits: 0,
+				// enabled: false,
+				// credits: 0,
+				enabled: true,
+				credits: 1_000_000_000,
 			},
 			workflowHistory: {
 				pruneTime: -1,
@@ -283,7 +314,8 @@ export class FrontendService {
 			},
 			easyAIWorkflowOnboarded: false,
 			folders: {
-				enabled: false,
+				// enabled: false,
+				enabled: true,
 			},
 			evaluation: {
 				quota: this.licenseState.getMaxWorkflowsWithEvaluations(),
@@ -338,38 +370,40 @@ export class FrontendService {
 			this.settings.easyAIWorkflowOnboarded = false;
 		}
 
-		const isS3Selected = this.binaryDataConfig.mode === 's3';
-		const isS3Available = this.binaryDataConfig.availableModes.includes('s3');
-		const isS3Licensed = this.license.isBinaryDataS3Licensed();
-		const isAiAssistantEnabled = this.license.isAiAssistantEnabled();
-		const isAskAiEnabled = this.license.isAskAiEnabled();
-		const isAiCreditsEnabled = this.license.isAiCreditsEnabled();
+		// const isS3Selected = this.binaryDataConfig.mode === 's3';
+		// const isS3Available = this.binaryDataConfig.availableModes.includes('s3');
+		// const isS3Licensed = this.license.isBinaryDataS3Licensed();
+		// const isAiAssistantEnabled = this.license.isAiAssistantEnabled();
+		const isAiAssistantEnabled = true;
+		// const isAskAiEnabled = this.license.isAskAiEnabled();
+		const isAskAiEnabled = true;
+		// const isAiCreditsEnabled = this.license.isAiCreditsEnabled();
+		const isAiCreditsEnabled = true;
 
-		this.settings.license.planName = this.license.getPlanName();
+		// this.settings.license.planName = this.license.getPlanName();
+		this.settings.license.planName = 'Enterprise';
 		this.settings.license.consumerId = this.license.getConsumerId();
 
 		// refresh enterprise status
-		Object.assign(this.settings.enterprise, {
-			sharing: this.license.isSharingEnabled(),
-			logStreaming: this.license.isLogStreamingEnabled(),
-			ldap: this.license.isLdapEnabled(),
-			saml: this.license.isSamlEnabled(),
-			oidc: this.licenseState.isOidcLicensed(),
-			mfaEnforcement: this.licenseState.isMFAEnforcementLicensed(),
-			advancedExecutionFilters: this.license.isAdvancedExecutionFiltersEnabled(),
-			variables: this.license.isVariablesEnabled(),
-			sourceControl: this.license.isSourceControlLicensed(),
-			externalSecrets: this.license.isExternalSecretsEnabled(),
-			showNonProdBanner: this.license.isLicensed(LICENSE_FEATURES.SHOW_NON_PROD_BANNER),
-			debugInEditor: this.license.isDebugInEditorLicensed(),
-			binaryDataS3: isS3Available && isS3Selected && isS3Licensed,
-			workflowHistory:
-				this.license.isWorkflowHistoryLicensed() && this.globalConfig.workflowHistory.enabled,
-			workerView: this.license.isWorkerViewLicensed(),
-			advancedPermissions: this.license.isAdvancedPermissionsLicensed(),
-			apiKeyScopes: this.license.isApiKeyScopesEnabled(),
-			workflowDiffs: this.licenseState.isWorkflowDiffsLicensed(),
-		});
+		// Object.assign(this.settings.enterprise, {
+		// 	sharing: this.license.isSharingEnabled(),
+		// 	logStreaming: this.license.isLogStreamingEnabled(),
+		// 	ldap: this.license.isLdapEnabled(),
+		// 	saml: this.license.isSamlEnabled(),
+		// 	advancedExecutionFilters: this.license.isAdvancedExecutionFiltersEnabled(),
+		// 	variables: this.license.isVariablesEnabled(),
+		// 	sourceControl: this.license.isSourceControlLicensed(),
+		// 	externalSecrets: this.license.isExternalSecretsEnabled(),
+		// 	// showNonProdBanner: this.license.isLicensed(LICENSE_FEATURES.SHOW_NON_PROD_BANNER),
+		// 	showNonProdBanner: false,
+		// 	debugInEditor: this.license.isDebugInEditorLicensed(),
+		// 	binaryDataS3: isS3Available && isS3Selected && isS3Licensed,
+		// 	workflowHistory:
+		// 		this.license.isWorkflowHistoryLicensed() && this.globalConfig.workflowHistory.enabled,
+		// 	workerView: this.license.isWorkerViewLicensed(),
+		// 	advancedPermissions: this.license.isAdvancedPermissionsLicensed(),
+		// 	apiKeyScopes: this.license.isApiKeyScopesEnabled(),
+		// });
 
 		if (this.license.isLdapEnabled()) {
 			Object.assign(this.settings.sso.ldap, {
@@ -429,9 +463,9 @@ export class FrontendService {
 
 		this.settings.binaryDataMode = this.binaryDataConfig.mode;
 
-		this.settings.enterprise.projects.team.limit = this.license.getTeamProjectLimit();
+		// this.settings.enterprise.projects.team.limit = this.license.getTeamProjectLimit();
 
-		this.settings.folders.enabled = this.license.isFoldersEnabled();
+		// this.settings.folders.enabled = this.license.isFoldersEnabled();
 
 		// Refresh evaluation settings
 		this.settings.evaluation.quota = this.licenseState.getMaxWorkflowsWithEvaluations();

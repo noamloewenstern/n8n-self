@@ -4,8 +4,8 @@
   "scripts": {
     "dev": "pnpm run storybook",
     "build": "pnpm build:vite && pnpm build:bundle",
-    "build:vite": "cross-env vite build",
-    "build:bundle": "cross-env INCLUDE_VUE=true vite build",
+    "build:vite": "cross-env NODE_OPTIONS=\"--max-old-space-size=4096\" vite build",
+    "build:bundle": "cross-env INCLUDE_VUE=true NODE_OPTIONS=\"--max-old-space-size=4096\" vite build",
     "preview": "vite preview",
     "test:dev": "vitest",
     "test": "vitest run",
