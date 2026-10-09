@@ -1,0 +1,1736 @@
+diff --git a/.github/CODEOWNERS b/.bak_github/CODEOWNERS
+similarity index 100%
+rename from .github/CODEOWNERS
+rename to .bak_github/CODEOWNERS
+diff --git a/.github/ISSUE_TEMPLATE/01-bug.yml b/.bak_github/ISSUE_TEMPLATE/01-bug.yml
+similarity index 100%
+rename from .github/ISSUE_TEMPLATE/01-bug.yml
+rename to .bak_github/ISSUE_TEMPLATE/01-bug.yml
+diff --git a/.github/ISSUE_TEMPLATE/config.yml b/.bak_github/ISSUE_TEMPLATE/config.yml
+similarity index 100%
+rename from .github/ISSUE_TEMPLATE/config.yml
+rename to .bak_github/ISSUE_TEMPLATE/config.yml
+diff --git a/.github/actionlint.yaml b/.bak_github/actionlint.yaml
+similarity index 100%
+rename from .github/actionlint.yaml
+rename to .bak_github/actionlint.yaml
+diff --git a/.github/actions/setup-nodejs-blacksmith/action.yml b/.bak_github/actions/setup-nodejs-blacksmith/action.yml
+similarity index 100%
+rename from .github/actions/setup-nodejs-blacksmith/action.yml
+rename to .bak_github/actions/setup-nodejs-blacksmith/action.yml
+diff --git a/.github/docker-compose.yml b/.bak_github/docker-compose.yml
+similarity index 100%
+rename from .github/docker-compose.yml
+rename to .bak_github/docker-compose.yml
+diff --git a/.github/pull_request_template.md b/.bak_github/pull_request_template.md
+similarity index 100%
+rename from .github/pull_request_template.md
+rename to .bak_github/pull_request_template.md
+diff --git a/.github/pull_request_title_conventions.md b/.bak_github/pull_request_title_conventions.md
+similarity index 100%
+rename from .github/pull_request_title_conventions.md
+rename to .bak_github/pull_request_title_conventions.md
+diff --git a/.bak_github/scripts/bump-versions.mjs b/.bak_github/scripts/bump-versions.mjs
+new file mode 100644
+index 0000000000..6c24c4b97f
+--- /dev/null
++++ b/.bak_github/scripts/bump-versions.mjs
+@@ -0,0 +1,72 @@
++import semver from 'semver';
++import { writeFile, readFile } from 'fs/promises';
++import { resolve } from 'path';
++import child_process from 'child_process';
++import { promisify } from 'util';
++import assert from 'assert';
++
++const exec = promisify(child_process.exec);
++
++function generateExperimentalVersion(currentVersion) {
++	const parsed = semver.parse(currentVersion);
++	if (!parsed) throw new Error(`Invalid version: ${currentVersion}`);
++
++	// Check if it's already an experimental version
++	if (parsed.prerelease.length > 0 && parsed.prerelease[0] === 'exp') {
++		// Increment the experimental minor version
++		const expMinor = (parsed.prerelease[1] || 0) + 1;
++		return `${parsed.major}.${parsed.minor}.${parsed.patch}-exp.${expMinor}`;
++	}
++
++	// Create new experimental version: <major>.<minor>.<patch>-exp.0
++	return `${parsed.major}.${parsed.minor}.${parsed.patch}-exp.0`;
++}
++
++const rootDir = process.cwd();
++const releaseType = process.env.RELEASE_TYPE;
++assert.match(releaseType, /^(patch|minor|major|experimental)$/, 'Invalid RELEASE_TYPE');
++
++// TODO: if releaseType is `auto` determine release type based on the changelog
++
++const lastTag = (await exec('git describe --tags --match "n8n@*" --abbrev=0')).stdout.trim();
++const packages = JSON.parse((await exec('pnpm ls -r --only-projects --json')).stdout);
++
++const packageMap = {};
++for (let { name, path, version, private: isPrivate, dependencies } of packages) {
++	if (isPrivate && path !== rootDir) continue;
++	if (path === rootDir) name = 'monorepo-root';
++
++	const isDirty = await exec(`git diff --quiet HEAD ${lastTag} -- ${path}`)
++		.then(() => false)
++		.catch((error) => true);
++
++	packageMap[name] = { path, isDirty, version };
++}
++
++assert.ok(
++	Object.values(packageMap).some(({ isDirty }) => isDirty),
++	'No changes found since the last release',
++);
++
++// Keep the monorepo version up to date with the released version
++packageMap['monorepo-root'].version = packageMap['n8n'].version;
++
++for (const packageName in packageMap) {
++	const { path, version, isDirty } = packageMap[packageName];
++	const packageFile = resolve(path, 'package.json');
++	const packageJson = JSON.parse(await readFile(packageFile, 'utf-8'));
++
++	packageJson.version = packageMap[packageName].nextVersion =
++		isDirty ||
++		Object.keys(packageJson.dependencies || {}).some(
++			(dependencyName) => packageMap[dependencyName]?.isDirty,
++		)
++			? releaseType === 'experimental'
++				? generateExperimentalVersion(version)
++				: semver.inc(version, releaseType)
++			: version;
++
++	await writeFile(packageFile, JSON.stringify(packageJson, null, 2) + '\n');
++}
++
++console.log(packageMap['n8n'].nextVersion);
+diff --git a/.bak_github/scripts/ensure-provenance-fields.mjs b/.bak_github/scripts/ensure-provenance-fields.mjs
+new file mode 100644
+index 0000000000..2fad319a62
+--- /dev/null
++++ b/.bak_github/scripts/ensure-provenance-fields.mjs
+@@ -0,0 +1,44 @@
++import { writeFile, readFile, copyFile } from 'fs/promises';
++import { resolve, dirname } from 'path';
++import child_process from 'child_process';
++import { fileURLToPath } from 'url';
++import { promisify } from 'util';
++
++const exec = promisify(child_process.exec);
++
++const commonFiles = ['LICENSE.md', 'LICENSE_EE.md'];
++
++const baseDir = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
++const packages = JSON.parse((await exec('pnpm ls -r --only-projects --json')).stdout);
++
++for (let { name, path, version, private: isPrivate } of packages) {
++	if (isPrivate) continue;
++
++	const packageFile = resolve(path, 'package.json');
++	const packageJson = {
++		...JSON.parse(await readFile(packageFile, 'utf-8')),
++		// Add these fields to all published package.json files to ensure provenance checks pass
++		license: 'SEE LICENSE IN LICENSE.md',
++		homepage: 'https://n8n.io',
++		author: {
++			name: 'Jan Oberhauser',
++			email: 'jan@n8n.io',
++		},
++		repository: {
++			type: 'git',
++			url: 'git+https://github.com/n8n-io/n8n.git',
++		},
++	};
++
++	// Copy over LICENSE.md and LICENSE_EE.md into every published package, and ensure they get included in the published package
++	await Promise.all(
++		commonFiles.map(async (file) => {
++			await copyFile(resolve(baseDir, file), resolve(path, file));
++			if (packageJson.files && !packageJson.files.includes(file)) {
++				packageJson.files.push(file);
++			}
++		}),
++	);
++
++	await writeFile(packageFile, JSON.stringify(packageJson, null, 2) + '\n');
++}
+diff --git a/.bak_github/scripts/package.json b/.bak_github/scripts/package.json
+new file mode 100644
+index 0000000000..7640790f2d
+--- /dev/null
++++ b/.bak_github/scripts/package.json
+@@ -0,0 +1,12 @@
++{
++  "dependencies": {
++    "cacheable-lookup": "6.1.0",
++    "conventional-changelog": "^4.0.0",
++    "debug": "4.3.4",
++    "glob": "10.3.10",
++    "p-limit": "3.1.0",
++    "picocolors": "1.0.1",
++    "semver": "7.5.4",
++    "tempfile": "5.0.0"
++  }
++}
+diff --git a/.bak_github/scripts/trim-fe-packageJson.js b/.bak_github/scripts/trim-fe-packageJson.js
+new file mode 100644
+index 0000000000..50f456d2a9
+--- /dev/null
++++ b/.bak_github/scripts/trim-fe-packageJson.js
+@@ -0,0 +1,18 @@
++const { writeFileSync } = require('fs');
++const { resolve } = require('path');
++const baseDir = resolve(__dirname, '../..');
++
++const trimPackageJson = (packageName) => {
++	const filePath = resolve(baseDir, 'packages', packageName, 'package.json');
++	const { scripts, peerDependencies, devDependencies, dependencies, ...packageJson } = require(
++		filePath,
++	);
++	if (packageName === 'frontend/@n8n/chat') {
++		packageJson.dependencies = dependencies;
++	}
++	writeFileSync(filePath, JSON.stringify(packageJson, null, 2) + '\n', 'utf-8');
++};
++
++trimPackageJson('frontend/@n8n/chat');
++trimPackageJson('frontend/@n8n/design-system');
++trimPackageJson('frontend/editor-ui');
+diff --git a/.bak_github/scripts/update-changelog.mjs b/.bak_github/scripts/update-changelog.mjs
+new file mode 100644
+index 0000000000..52a25f6ecf
+--- /dev/null
++++ b/.bak_github/scripts/update-changelog.mjs
+@@ -0,0 +1,40 @@
++import createTempFile from 'tempfile';
++import conventionalChangelog from 'conventional-changelog';
++import { resolve } from 'path';
++import { createReadStream, createWriteStream } from 'fs';
++import { dirname } from 'path';
++import { fileURLToPath } from 'url';
++import { pipeline } from 'stream/promises';
++import packageJson from '../../package.json' with { type: 'json' };
++
++const baseDir = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
++const fullChangelogFile = resolve(baseDir, 'CHANGELOG.md');
++// Version includes experimental versions (e.g., 1.2.3-exp.0)
++const versionChangelogFile = resolve(baseDir, `CHANGELOG-${packageJson.version}.md`);
++
++const changelogStream = conventionalChangelog({
++	preset: 'angular',
++	releaseCount: 1,
++	tagPrefix: 'n8n@',
++	transform: (commit, callback) => {
++		const hasNoChangelogInHeader = commit.header.includes('(no-changelog)');
++		const isBenchmarkScope = commit.scope === 'benchmark';
++
++		// Ignore commits that have 'benchmark' scope or '(no-changelog)' in the header
++		callback(null, hasNoChangelogInHeader || isBenchmarkScope ? undefined : commit);
++	},
++}).on('error', (err) => {
++	console.error(err.stack);
++	process.exit(1);
++});
++
++// Write the new changelog to a new temporary file, so that the contents can be used in the PR description
++await pipeline(changelogStream, createWriteStream(versionChangelogFile));
++
++// Since we can't read and write from the same file at the same time,
++// we use a temporary file to output the updated changelog to.
++const tmpFile = createTempFile();
++const tmpStream = createWriteStream(tmpFile);
++await pipeline(createReadStream(versionChangelogFile), tmpStream, { end: false });
++await pipeline(createReadStream(fullChangelogFile), tmpStream);
++await pipeline(createReadStream(tmpFile), createWriteStream(fullChangelogFile));
+diff --git a/.bak_github/scripts/validate-docs-links.js b/.bak_github/scripts/validate-docs-links.js
+new file mode 100644
+index 0000000000..1c11e75f7f
+--- /dev/null
++++ b/.bak_github/scripts/validate-docs-links.js
+@@ -0,0 +1,90 @@
++#!/usr/bin/env node
++
++const packages = ['nodes-base', '@n8n/nodes-langchain'];
++const concurrency = 20;
++let exitCode = 0;
++
++const debug = require('debug')('n8n');
++const path = require('path');
++const https = require('https');
++const glob = require('glob');
++const pLimit = require('p-limit');
++const picocolors = require('picocolors');
++const Lookup = require('cacheable-lookup').default;
++
++const agent = new https.Agent({ keepAlive: true, keepAliveMsecs: 5000 });
++new Lookup().install(agent);
++const limiter = pLimit(concurrency);
++
++const validateUrl = async (packageName, kind, type) =>
++	new Promise((resolve, reject) => {
++		const name = type.displayName;
++		const documentationUrl =
++			kind === 'credentials'
++				? type.documentationUrl
++				: type.codex?.resources?.primaryDocumentation?.[0]?.url;
++		if (!documentationUrl) resolve([name, null]);
++
++		const url = new URL(
++			/^https?:\/\//.test(documentationUrl)
++				? documentationUrl
++				: `https://docs.n8n.io/integrations/builtin/${kind}/${documentationUrl.toLowerCase()}/`,
++		);
++		https
++			.request(
++				{
++					hostname: url.hostname,
++					port: 443,
++					path: url.pathname,
++					method: 'HEAD',
++					agent,
++				},
++				(res) => {
++					debug(picocolors.green('✓'), packageName, kind, name);
++					resolve([name, res.statusCode]);
++				},
++			)
++			.on('error', (e) => {
++				debug(picocolors.red('✘'), packageName, kind, name);
++				reject(e);
++			})
++			.end();
++	});
++
++const checkLinks = async (packageName, kind) => {
++	const baseDir = path.resolve(__dirname, '../../packages', packageName);
++	let types = require(path.join(baseDir, `dist/types/${kind}.json`));
++	if (kind === 'nodes')
++		types = types.filter(
++			({ codex, hidden }) => !!codex?.resources?.primaryDocumentation && !hidden,
++		);
++	debug(packageName, kind, types.length);
++
++	const statuses = await Promise.all(
++		types.map((type) =>
++			limiter(() => {
++				return validateUrl(packageName, kind, type);
++			}),
++		),
++	);
++
++	const missingDocs = [];
++	const invalidUrls = [];
++	for (const [name, statusCode] of statuses) {
++		if (statusCode === null) missingDocs.push(name);
++		if (statusCode !== 200) invalidUrls.push(name);
++	}
++
++	if (missingDocs.length)
++		console.log('Documentation URL missing in %s for %s', packageName, kind, missingDocs);
++	if (invalidUrls.length)
++		console.log('Documentation URL invalid in %s for %s', packageName, kind, invalidUrls);
++	if (missingDocs.length || invalidUrls.length) exitCode = 1;
++};
++
++(async () => {
++	for (const packageName of packages) {
++		await Promise.all([checkLinks(packageName, 'credentials'), checkLinks(packageName, 'nodes')]);
++		if (exitCode !== 0) process.exit(exitCode);
++	}
++})();
+diff --git a/.github/workflows/benchmark-destroy-nightly.yml b/.bak_github/workflows/benchmark-destroy-nightly.yml
+similarity index 100%
+rename from .github/workflows/benchmark-destroy-nightly.yml
+rename to .bak_github/workflows/benchmark-destroy-nightly.yml
+diff --git a/.github/workflows/benchmark-nightly.yml b/.bak_github/workflows/benchmark-nightly.yml
+similarity index 100%
+rename from .github/workflows/benchmark-nightly.yml
+rename to .bak_github/workflows/benchmark-nightly.yml
+diff --git a/.github/workflows/build-windows.yml b/.bak_github/workflows/build-windows.yml
+similarity index 100%
+rename from .github/workflows/build-windows.yml
+rename to .bak_github/workflows/build-windows.yml
+diff --git a/.github/workflows/check-documentation-urls.yml b/.bak_github/workflows/check-documentation-urls.yml
+similarity index 100%
+rename from .github/workflows/check-documentation-urls.yml
+rename to .bak_github/workflows/check-documentation-urls.yml
+diff --git a/.github/workflows/check-pr-title.yml b/.bak_github/workflows/check-pr-title.yml
+similarity index 100%
+rename from .github/workflows/check-pr-title.yml
+rename to .bak_github/workflows/check-pr-title.yml
+diff --git a/.github/workflows/check-run-eligibility.yml b/.bak_github/workflows/check-run-eligibility.yml
+similarity index 100%
+rename from .github/workflows/check-run-eligibility.yml
+rename to .bak_github/workflows/check-run-eligibility.yml
+diff --git a/.github/workflows/chromatic.yml b/.bak_github/workflows/chromatic.yml
+similarity index 100%
+rename from .github/workflows/chromatic.yml
+rename to .bak_github/workflows/chromatic.yml
+diff --git a/.github/workflows/ci-master.yml b/.bak_github/workflows/ci-master.yml
+similarity index 100%
+rename from .github/workflows/ci-master.yml
+rename to .bak_github/workflows/ci-master.yml
+diff --git a/.github/workflows/ci-postgres-mysql.yml b/.bak_github/workflows/ci-postgres-mysql.yml
+similarity index 100%
+rename from .github/workflows/ci-postgres-mysql.yml
+rename to .bak_github/workflows/ci-postgres-mysql.yml
+diff --git a/.github/workflows/ci-pull-requests.yml b/.bak_github/workflows/ci-pull-requests.yml
+similarity index 100%
+rename from .github/workflows/ci-pull-requests.yml
+rename to .bak_github/workflows/ci-pull-requests.yml
+diff --git a/.github/workflows/ci-python.yml b/.bak_github/workflows/ci-python.yml
+similarity index 100%
+rename from .github/workflows/ci-python.yml
+rename to .bak_github/workflows/ci-python.yml
+diff --git a/.github/workflows/claude.yml b/.bak_github/workflows/claude.yml
+similarity index 100%
+rename from .github/workflows/claude.yml
+rename to .bak_github/workflows/claude.yml
+diff --git a/.github/workflows/create-patch-release-branch.yaml b/.bak_github/workflows/create-patch-release-branch.yaml
+similarity index 100%
+rename from .github/workflows/create-patch-release-branch.yaml
+rename to .bak_github/workflows/create-patch-release-branch.yaml
+diff --git a/.github/workflows/docker-base-image.yml b/.bak_github/workflows/docker-base-image.yml
+similarity index 100%
+rename from .github/workflows/docker-base-image.yml
+rename to .bak_github/workflows/docker-base-image.yml
+diff --git a/.github/workflows/docker-build-push.yml b/.bak_github/workflows/docker-build-push.yml
+similarity index 100%
+rename from .github/workflows/docker-build-push.yml
+rename to .bak_github/workflows/docker-build-push.yml
+diff --git a/.github/workflows/docker-images-benchmark.yml b/.bak_github/workflows/docker-images-benchmark.yml
+similarity index 100%
+rename from .github/workflows/docker-images-benchmark.yml
+rename to .bak_github/workflows/docker-images-benchmark.yml
+diff --git a/.github/workflows/e2e-reusable.yml b/.bak_github/workflows/e2e-reusable.yml
+similarity index 100%
+rename from .github/workflows/e2e-reusable.yml
+rename to .bak_github/workflows/e2e-reusable.yml
+diff --git a/.github/workflows/e2e-tests-pr.yml b/.bak_github/workflows/e2e-tests-pr.yml
+similarity index 100%
+rename from .github/workflows/e2e-tests-pr.yml
+rename to .bak_github/workflows/e2e-tests-pr.yml
+diff --git a/.github/workflows/e2e-tests.yml b/.bak_github/workflows/e2e-tests.yml
+similarity index 100%
+rename from .github/workflows/e2e-tests.yml
+rename to .bak_github/workflows/e2e-tests.yml
+diff --git a/.github/workflows/linting-reusable.yml b/.bak_github/workflows/linting-reusable.yml
+similarity index 100%
+rename from .github/workflows/linting-reusable.yml
+rename to .bak_github/workflows/linting-reusable.yml
+diff --git a/.github/workflows/notify-pr-status.yml b/.bak_github/workflows/notify-pr-status.yml
+similarity index 100%
+rename from .github/workflows/notify-pr-status.yml
+rename to .bak_github/workflows/notify-pr-status.yml
+diff --git a/.github/workflows/playwright-nightly.yml b/.bak_github/workflows/playwright-nightly.yml
+similarity index 100%
+rename from .github/workflows/playwright-nightly.yml
+rename to .bak_github/workflows/playwright-nightly.yml
+diff --git a/.github/workflows/playwright-test-docker-build.yml b/.bak_github/workflows/playwright-test-docker-build.yml
+similarity index 100%
+rename from .github/workflows/playwright-test-docker-build.yml
+rename to .bak_github/workflows/playwright-test-docker-build.yml
+diff --git a/.github/workflows/playwright-test-docker-pull.yml b/.bak_github/workflows/playwright-test-docker-pull.yml
+similarity index 100%
+rename from .github/workflows/playwright-test-docker-pull.yml
+rename to .bak_github/workflows/playwright-test-docker-pull.yml
+diff --git a/.github/workflows/playwright-test-performance.yml b/.bak_github/workflows/playwright-test-performance.yml
+similarity index 100%
+rename from .github/workflows/playwright-test-performance.yml
+rename to .bak_github/workflows/playwright-test-performance.yml
+diff --git a/.github/workflows/playwright-test-reusable.yml b/.bak_github/workflows/playwright-test-reusable.yml
+similarity index 100%
+rename from .github/workflows/playwright-test-reusable.yml
+rename to .bak_github/workflows/playwright-test-reusable.yml
+diff --git a/.github/workflows/sbom-generation-callable.yml b/.bak_github/workflows/release-attach-sbom.yml
+similarity index 100%
+rename from .github/workflows/sbom-generation-callable.yml
+rename to .bak_github/workflows/release-attach-sbom.yml
+diff --git a/.github/workflows/release-create-pr.yml b/.bak_github/workflows/release-create-pr.yml
+similarity index 100%
+rename from .github/workflows/release-create-pr.yml
+rename to .bak_github/workflows/release-create-pr.yml
+diff --git a/.github/workflows/release-publish.yml b/.bak_github/workflows/release-publish.yml
+similarity index 100%
+rename from .github/workflows/release-publish.yml
+rename to .bak_github/workflows/release-publish.yml
+diff --git a/.github/workflows/release-push-to-channel.yml b/.bak_github/workflows/release-push-to-channel.yml
+similarity index 100%
+rename from .github/workflows/release-push-to-channel.yml
+rename to .bak_github/workflows/release-push-to-channel.yml
+diff --git a/.github/workflows/release-standalone-package.yml b/.bak_github/workflows/release-standalone-package.yml
+similarity index 100%
+rename from .github/workflows/release-standalone-package.yml
+rename to .bak_github/workflows/release-standalone-package.yml
+diff --git a/.bak_github/workflows/sbom-generation-callable.yml b/.bak_github/workflows/sbom-generation-callable.yml
+new file mode 100644
+index 0000000000..a31cf62bf7
+--- /dev/null
++++ b/.bak_github/workflows/sbom-generation-callable.yml
+@@ -0,0 +1,109 @@
++name: 'Release: Attach SBOM'
++
++on:
++  workflow_call:
++    inputs:
++      n8n_version:
++        description: 'N8N version to generate SBOM for'
++        required: true
++        type: string
++      release_tag_ref:
++        description: 'Git reference to checkout (e.g. n8n@1.2.3)'
++        required: true
++        type: string
++    secrets:
++      SLACK_WEBHOOK_URL:
++        required: true
++
++  workflow_dispatch:
++    inputs:
++      n8n_version:
++        description: 'N8N version to generate SBOM for'
++        required: true
++        type: string
++      release_tag_ref:
++        description: 'Git reference to checkout (e.g. n8n@1.2.3)'
++        required: true
++        type: string
++
++permissions:
++  contents: write
++  id-token: write
++  attestations: write
++
++jobs:
++  generate-sbom:
++    name: Generate and Attach SBOM to Release
++    runs-on: ubuntu-latest
++    timeout-minutes: 15
++    continue-on-error: true
++    steps:
++      - name: Checkout release tag
++        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
++        with:
++          ref: ${{ inputs.release_tag_ref }}
++
++      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
++        with:
++          node-version: 22.x
++
++      - name: Setup corepack and pnpm
++        run: |
++          npm i -g corepack@0.33
++          corepack enable
++
++      - name: Install dependencies for SBOM generation
++        run: pnpm install --frozen-lockfile
++
++      - name: Generate CycloneDX SBOM for source code
++        uses: anchore/sbom-action@b9a8bc8d2c19e9396f663e53c7b55848e98cf17c # v0.17.6
++        with:
++          path: ./
++          format: cyclonedx-json
++          output-file: sbom-source.cdx.json
++
++      - name: Attest build provenance for source release
++        uses: actions/attest-build-provenance@977bb37082e0bfde04bb18e63b0632b7b5a1c4a3 # v3.0.0
++        with:
++          subject-path: './package.json'
++
++      - name: Attest SBOM for source release
++        uses: actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34 # v3.0.0
++        with:
++          subject-path: './package.json'
++          sbom-path: 'sbom-source.cdx.json'
++
++      - name: Install Cosign
++        uses: sigstore/cosign-installer@9e9de2292db7abb3f51b7f4808d98f0d347a8919 # v3.7.0
++
++      - name: Sign SBOM (keyless)
++        run: |
++          # Sign SBOM using Cosign keyless signing with GitHub OIDC
++          # This provides cryptographic proof of authenticity and integrity
++          cosign sign-blob --yes --output-signature sbom-source.cdx.sig --output-certificate sbom-source.cdx.pem sbom-source.cdx.json
++
++      - name: Attach SBOM files to release
++        env:
++          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
++        run: |
++          # Upload SBOM files to the existing release
++          gh release upload "${{ inputs.release_tag_ref }}" \
++            sbom-source.cdx.json \
++            sbom-source.cdx.sig \
++            sbom-source.cdx.pem \
++            --clobber
++
++          COMPONENT_COUNT=$(jq '.components | length' sbom-source.cdx.json 2>/dev/null || echo "unknown")
++          echo "✅ SBOM workflow completed"
++          echo "📊 SBOM contains $COMPONENT_COUNT components"
++          echo "🛡️ GitHub attestations created for source release"
++
++      - name: Notify Slack on failure
++        if: failure()
++        uses: act10ns/slack@44541246747a30eb3102d87f7a4cc5471b0ffb7d # v2.1.0
++        with:
++          status: ${{ job.status }}
++          channel: '#alerts-build'
++          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
++          message: |
++            <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}| SBOM generation and attachment failed for release ${{ inputs.release_tag_ref }} >
+\ No newline at end of file
+diff --git a/.github/workflows/security-trivy-scan-callable.yml b/.bak_github/workflows/security-trivy-scan-callable.yml
+similarity index 100%
+rename from .github/workflows/security-trivy-scan-callable.yml
+rename to .bak_github/workflows/security-trivy-scan-callable.yml
+diff --git a/.github/workflows/storybook.yml b/.bak_github/workflows/storybook.yml
+similarity index 100%
+rename from .github/workflows/storybook.yml
+rename to .bak_github/workflows/storybook.yml
+diff --git a/.github/workflows/sync-public-api-docs.yml b/.bak_github/workflows/sync-public-api-docs.yml
+similarity index 100%
+rename from .github/workflows/sync-public-api-docs.yml
+rename to .bak_github/workflows/sync-public-api-docs.yml
+diff --git a/.github/workflows/test-workflows-callable.yml b/.bak_github/workflows/test-workflows-callable.yml
+similarity index 100%
+rename from .github/workflows/test-workflows-callable.yml
+rename to .bak_github/workflows/test-workflows-callable.yml
+diff --git a/.github/workflows/test-workflows-nightly.yml b/.bak_github/workflows/test-workflows-nightly.yml
+similarity index 100%
+rename from .github/workflows/test-workflows-nightly.yml
+rename to .bak_github/workflows/test-workflows-nightly.yml
+diff --git a/.github/workflows/test-workflows-pr-comment.yml b/.bak_github/workflows/test-workflows-pr-comment.yml
+similarity index 100%
+rename from .github/workflows/test-workflows-pr-comment.yml
+rename to .bak_github/workflows/test-workflows-pr-comment.yml
+diff --git a/.github/workflows/units-tests-reusable.yml b/.bak_github/workflows/units-tests-reusable.yml
+similarity index 100%
+rename from .github/workflows/units-tests-reusable.yml
+rename to .bak_github/workflows/units-tests-reusable.yml
+diff --git a/.github/actions/setup-nodejs-github/action.yml b/.github/actions/setup-nodejs-github/action.yml
+deleted file mode 100644
+index 1d1d4f75d9..0000000000
+--- a/.github/actions/setup-nodejs-github/action.yml
++++ /dev/null
+@@ -1,33 +0,0 @@
+-name: 'GitHub Node.js Build Setup for Github Hosted Runners'
+-description: 'Configures Node.js with pnpm, installs dependencies, enables Turborepo caching, and builds the project or an optional command.'
+-
+-inputs:
+-  node-version:
+-    description: 'Node.js version to use. Uses latest 22.x by default.'
+-    required: false
+-    default: '22.x'
+-  build-command:
+-    description: 'Command to execute for building the project or an optional command. Leave empty to skip build step.'
+-    required: false
+-    default: 'pnpm build'
+-    type: string
+-
+-runs:
+-  using: 'composite'
+-  steps:
+-    - name: Setup Node.js
+-      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+-      with:
+-        node-version: ${{ inputs.node-version }}
+-
+-    - name: Setup pnpm and Install Dependencies
+-      uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+-      with:
+-        run_install: true
+-
+-    - name: Configure Turborepo Cache
+-      uses: rharkor/caching-for-turbo@2b4b5b14a8d16b8556a58993a8ac331d56d8906d # v2.3.2
+-
+-    - name: Build Project
+-      run: ${{ inputs.build-command }}
+-      shell: bash
+diff --git a/custom.md b/custom.md
+new file mode 100644
+index 0000000000..65ffc1e8cc
+--- /dev/null
++++ b/custom.md
+@@ -0,0 +1,164 @@
++# custom branch: patch reference
++
++Reference for AI agents and humans porting the `custom` branch patches. Written from `git diff 9806e6fc72 custom` (base = last v1 commit `9806e6fc72`, n8n 1.113.0 line).
++
++Goal of the branch: run a local n8n build with all enterprise/licensed features unlocked, telemetry off, and a custom Docker image. Personal/local use only. Licensing enforcement is disabled.
++
++## Convention
++
++Every patch is marked `// CUSTOM PATCH`. Original line is kept commented above it. To list all patches on any tree:
++
++```bash
++git grep -n "CUSTOM PATCH"
++```
++
++## Commits on custom (v1 base, oldest first)
++
++| SHA | Subject | Area |
++|---|---|---|
++| 6be3e14fe9 | patch | Mixed code patches |
++| 916192b445 | updated custom docker | Docker image |
++| 8465790593 | renamed .github to ifnore acrtinos | CI disabled |
++| adbff6b2f4 | change vars to see changes | Misc |
++| e5feebf04c | added scripts for local-build | Build |
++| 9e6cb87fb1 | small patches for build | Build |
++| 769741eabd | docs: Add custom.md documenting branch changes | Docs |
++
++Merge commits (`Merge branch 'master' into custom`) are noise; ignore for porting.
++
++## Categories
++
++### 1. License bypass (backend)
++
++Files:
++- `packages/@n8n/backend-common/src/license-state.ts`
++- `packages/cli/src/license.ts`
++- `packages/cli/src/license/license.service.ts`
++- `packages/cli/src/modules/insights/insights.service.ts`
++
++What:
++- `LicenseState.isLicensed()` and `License.isLicensed()` return `true` for every feature. Original call to `licenseProvider` / `manager.hasFeatureEnabled` commented out.
++- Quotas hardcoded (originally read from license, falling back to unlimited or 0):
++  - `getMaxUsers`, `getMaxActiveWorkflows`, `getMaxVariables`, `getMaxTeamProjects`, `getMaxWorkflowsWithEvaluations` → `10_001`
++  - `getMaxAiCredits` → `10_000_001`
++  - `getWorkflowHistoryPruneQuota` → `UNLIMITED_LICENSE_QUOTA`
++  - `getInsightsMaxHistory` → `30`; `getInsightsRetentionMaxAge` → `180`; `getInsightsRetentionPruneInterval` → `120`
++- `getPlanName()` and `license.service` planName → `'Enterprise'`.
++- `InsightsService.getAvailableDateRanges()`: max history = `Number.MAX_SAFE_INTEGER`, hourly data always licensed.
++
++Why: unlock enterprise UI and limits without a license key.
++
++### 2. Frontend settings / feature flags (backend-served)
++
++File: `packages/cli/src/services/frontend.service.ts`
++
++What (settings object sent to editor):
++- `sso.saml.loginEnabled`, `sso.ldap.loginEnabled` → `true`
++- `aiAssistant.enabled` → `true`; `askAi.enabled`, `aiCredits.enabled` → `true`; `aiCredits.credits` → `1_000_000_000`
++- `hiringBannerEnabled` → `false`
++- `enterprise.*` → mostly `true` (sharing, logStreaming, advancedExecutionFilters, variables, sourceControl, auditLogs, externalSecrets, debugInEditor, binaryDataS3, workerView, advancedPermissions, apiKeyScopes, workflowHistory, workflowDiffs). `ldap`, `saml`, `oidc`, `mfaEnforcement` still `false`. `projects.team.limit` → `10_000`.
++- `mfa.enabled` → `true`
++- `hideUsagePage` → `false`
++- `license.environment` → `'development'`
++- `variables.limit` → `10_000`
++- `folders.enabled` → `true`
++- Refresh block that reads `this.license.isXxx()` for `enterprise.*` is commented out (so it does not overwrite the hardcoded values above).
++
++### 3. Frontend store / init
++
++Files (v1 paths):
++- `packages/frontend/editor-ui/src/stores/settings.store.ts`
++- `packages/frontend/editor-ui/src/init.ts`
++- `packages/frontend/editor-ui/src/components/Telemetry.vue`
++- `packages/frontend/editor-ui/src/components/banners/NonProductionLicenseBanner.vue`
++
++What:
++- `isTelemetryEnabled` → `false` (store and `Telemetry.vue`). No telemetry sessionStarted event.
++- `isCommunityPlan` → `false`; `isDevRelease` → `false`.
++- `folders.value.enabled` → `true`.
++- `init.ts`: NON_PRODUCTION_LICENSE banner not pushed.
++- Banner `dismissible` → `true`.
++
++### 4. RBAC and enterprise checks (frontend)
++
++Files (v1 paths):
++- `packages/frontend/editor-ui/src/utils/rbac/checks/hasRole.ts` → always `true`
++- `.../checks/hasScope.ts` → always `true`
++- `.../checks/isEnterpriseFeatureEnabled.ts` → always `true`
++
++Note: `hasRole.ts` has dead code after `return true;`.
++
++### 5. Router guards (frontend)
++
++File: `packages/frontend/editor-ui/src/router.ts`
++
++What: removed custom middleware guards:
++- Usage page: `custom` (hideUsagePage) guard removed.
++- Community nodes: `custom` guard removed; `rbac` kept with `middleware: ['authenticated', 'rbac']` but its `middlewareOptions` and `telemetry` commented out, so the rbac scope check has no options.
++- SAML onboarding: `custom` guard removed.
++- Evaluation route: `custom` guard commented, not active.
++
++### 6. Config
++
++File: `packages/@n8n/config/src/configs/ai-assistant.config.ts`
++
++`baseUrl` default → `https://ai-assistant.n8n.io` (was `''`). Env `N8N_AI_ASSISTANT_BASE_URL` still overrides.
++
++### 7. Build and Docker
++
++Files:
++- `scripts/dockerize-n8n.mjs`: `getDockerPlatform()` forced to `linux/amd64` (original `linux/${dockerArch}` commented).
++- `packages/frontend/@n8n/chat/package.json`: `build:vite` and `build:bundle` get `NODE_OPTIONS="--max-old-space-size=4096"`.
++- `docker/images/n8n-custom/Dockerfile` (new, 66 lines): two stage. Stage 1 `n8nio/base:${NODE_VERSION}` runs `pnpm install --frozen-lockfile`, `pnpm build`, trims FE package.json via `.github/scripts/trim-fe-packageJson.js`, strips `.ts`/`.vue` sources, runs `pnpm --filter=n8n --prod deploy /compiled`. Stage 2 copies `/compiled` into `/usr/local/lib/node_modules/n8n`, downloads task-runner-launcher `LAUNCHER_VERSION=1.1.2` with sha256 check, `npm rebuild sqlite3`, pins `npm@11.4.1` (cross-spawn CVE).
++- `docker/images/n8n-custom/Dockerfile.ghcr.custom`: `FROM ghcr.io/noamloewenstern/n8n:custom2`.
++- `docker/images/n8n-custom/build-mac.sh` (`linux/arm64`) and `build-x86.sh` (`linux/x86_64`): `docker buildx build -t n8n-patch ...`.
++- `docker/images/n8n-custom/README.md`: usage `docker build -t n8n-custom -f docker/images/n8n-custom/Dockerfile .`
++
++### 8. CI disabled
++
++- `.github/` renamed to `.bak_github/` (all workflows, issue templates, CODEOWNERS, actionlint.yaml, PR templates).
++- `.github/actions/setup-nodejs-github/action.yml` deleted.
++- `.bak_github/scripts/` added: `bump-versions.mjs`, `ensure-provenance-fields.mjs`, `update-changelog.mjs`, `validate-docs-links.js`, `trim-fe-packageJson.js`, `package.json`.
++- `.bak_github/workflows/sbom-generation-callable.yml` added.
++
++Why: GitHub Actions not wanted on the fork. The v1 master commit `2ad9c80e51 delete github actions` renames to `.github.bak`, which conflicts with this branch's `.bak_github` rename, so cherry-pick aborted. Cherry-picking it again will conflict the same way. `origin/master` (v2) still has a `.github/` directory with 14 entries, so the disable is not applied there.
++
++## Porting to v2 (master `e2b4fee0ec`, n8n 2.43.0)
++
++Path changes (v1 → v2 on `master`):
++
++| v1 path | v2 path | Status |
++|---|---|---|
++| `packages/@n8n/backend-common/src/license-state.ts` | same | exists, changed |
++| `packages/cli/src/license.ts` | same | exists |
++| `packages/cli/src/license/license.service.ts` | same | exists |
++| `packages/cli/src/services/frontend.service.ts` | same | exists, heavily changed |
++| `packages/cli/src/modules/insights/insights.service.ts` | `packages/modules/insights/backend/src/insights.service.ts` | moved |
++| `packages/@n8n/config/src/configs/ai-assistant.config.ts` | same | exists |
++| `packages/frontend/@n8n/chat/package.json` | same | exists |
++| `packages/frontend/editor-ui/src/stores/settings.store.ts` | `packages/frontend/@n8n/stores/src/settings.store.ts` | moved |
++| `packages/frontend/editor-ui/src/router.ts` | `packages/frontend/editor-ui/src/app/router.ts` | moved |
++| `packages/frontend/editor-ui/src/utils/rbac/checks/*.ts` | `packages/frontend/editor-ui/src/app/utils/rbac/checks/*.ts` | moved |
++| `.../components/banners/NonProductionLicenseBanner.vue` | `packages/frontend/editor-ui/src/features/shared/banners/components/banners/NonProductionLicenseBanner.vue` | moved |
++| `packages/frontend/editor-ui/src/init.ts` | not found by name | search |
++| `packages/frontend/editor-ui/src/components/Telemetry.vue` | not found by name | search |
++| `scripts/dockerize-n8n.mjs` | same | exists |
++| `docker/images/n8n-custom/*` | not on master | port needed |
++| `.github/` workflows | `.github/` on master (not renamed) | re-apply rename if still wanted |
++
++Notes for porting:
++- v2 changed 38 of these files (527 insertions, 2601 deletions vs v1 base). Expect manual re-apply, not a cherry-pick. Re-derive each patch from the v2 file; do not replay the diff.
++- v2 Dockerfile (`docker/images/n8n/Dockerfile`) is multi-stage with native-module builder stages (isolated-vm, sqlite3, confluent kafka). The custom v1 Dockerfile does not map onto it. Port the idea (copy compiled tree, pin npm, launcher) onto the v2 layout.
++- Node 24+ and pnpm 12.4.2 on v2 (v1: Node 22, pnpm 10.16).
++- Re-verify every quota, flag, and default against v2 types before trusting this list. Values here describe v1 behavior.
++
++## Known issues in the patch set
++
++- Global `isLicensed() → true` also enables features whose code paths assume a real license (for example, the license-state `getValue` and the planName used by FE). Test each feature after porting.
++- `hasRole` / `hasScope` return `true` for all users. Any RBAC-gated UI is open. Fine for single-user local use; not for shared deployments.
++- Telemetry disabled in both FE store and `Telemetry.vue`; BE telemetry not touched.
++- `hiringBannerEnabled` hardcoded `false`; original read from `config.getEnv('hiringBanner.enabled')`.
++
++## Last updated
++
++- 2026-10-09, by Noam Loewenstern (analysis by Claude)
+diff --git a/docker/images/n8n-custom/Dockerfile b/docker/images/n8n-custom/Dockerfile
+new file mode 100644
+index 0000000000..4242327aef
+--- /dev/null
++++ b/docker/images/n8n-custom/Dockerfile
+@@ -0,0 +1,66 @@
++ARG NODE_VERSION=22
++ARG PLATFORM=linux/x86_64
++# 1. Create an image to build n8n
++FROM --platform=${PLATFORM} n8nio/base:${NODE_VERSION} AS builder
++
++# Build the application from source
++WORKDIR /src
++COPY . /src
++RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store --mount=type=cache,id=pnpm-metadata,target=/root/.cache/pnpm/metadata DOCKER_BUILD=true pnpm install --frozen-lockfile
++RUN pnpm build
++
++# Delete all dev dependencies
++RUN jq 'del(.pnpm.patchedDependencies)' package.json > package.json.tmp; mv package.json.tmp package.json
++RUN node .github/scripts/trim-fe-packageJson.js
++
++# Delete any source code or typings
++RUN find . -type f -name "*.ts" -o -name "*.vue" -o -name "tsconfig.json" -o -name "*.tsbuildinfo" | xargs rm -rf
++
++# Deploy the `n8n` package into /compiled
++RUN mkdir /compiled
++RUN NODE_ENV=production DOCKER_BUILD=true pnpm --filter=n8n --prod --no-optional --legacy deploy /compiled
++
++# 2. Start with a new clean image with just the code that is needed to run n8n
++FROM n8nio/base:${NODE_VERSION}
++ENV NODE_ENV=production
++
++ARG N8N_RELEASE_TYPE=dev
++ENV N8N_RELEASE_TYPE=${N8N_RELEASE_TYPE}
++
++WORKDIR /home/node
++COPY --from=builder /compiled /usr/local/lib/node_modules/n8n
++COPY docker/images/n8n/docker-entrypoint.sh /
++
++# Setup the Task Runner Launcher
++ARG TARGETPLATFORM
++ARG LAUNCHER_VERSION=1.1.2
++COPY docker/images/n8n/n8n-task-runners.json /etc/n8n-task-runners.json
++# Download, verify, then extract the launcher binary
++RUN \
++	if [[ "$TARGETPLATFORM" = "linux/amd64" ]]; then export ARCH_NAME="amd64"; \
++	elif [[ "$TARGETPLATFORM" = "linux/arm64" ]]; then export ARCH_NAME="arm64"; fi; \
++	mkdir /launcher-temp && \
++	cd /launcher-temp && \
++	wget https://github.com/n8n-io/task-runner-launcher/releases/download/${LAUNCHER_VERSION}/task-runner-launcher-${LAUNCHER_VERSION}-linux-${ARCH_NAME}.tar.gz && \
++	wget https://github.com/n8n-io/task-runner-launcher/releases/download/${LAUNCHER_VERSION}/task-runner-launcher-${LAUNCHER_VERSION}-linux-${ARCH_NAME}.tar.gz.sha256 && \
++	# The .sha256 does not contain the filename --> Form the correct checksum file
++	echo "$(cat task-runner-launcher-${LAUNCHER_VERSION}-linux-${ARCH_NAME}.tar.gz.sha256) task-runner-launcher-${LAUNCHER_VERSION}-linux-${ARCH_NAME}.tar.gz" > checksum.sha256 && \
++	sha256sum -c checksum.sha256 && \
++	tar xvf task-runner-launcher-${LAUNCHER_VERSION}-linux-${ARCH_NAME}.tar.gz --directory=/usr/local/bin && \
++	cd - && \
++	rm -r /launcher-temp
++
++RUN \
++	cd /usr/local/lib/node_modules/n8n && \
++	npm rebuild sqlite3 && \
++	cd - && \
++	ln -s /usr/local/lib/node_modules/n8n/bin/n8n /usr/local/bin/n8n && \
++	mkdir .n8n && \
++	chown node:node .n8n
++
++# Install npm 11.4.1 to fix the vulnerable cross-spawn dependency
++RUN npm install -g npm@11.4.1
++
++ENV SHELL /bin/sh
++USER node
++ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
+diff --git a/docker/images/n8n-custom/Dockerfile.ghcr.custom b/docker/images/n8n-custom/Dockerfile.ghcr.custom
+new file mode 100644
+index 0000000000..a00f75efe9
+--- /dev/null
++++ b/docker/images/n8n-custom/Dockerfile.ghcr.custom
+@@ -0,0 +1 @@
++FROM ghcr.io/noamloewenstern/n8n:custom2
+\ No newline at end of file
+diff --git a/docker/images/n8n-custom/README.md b/docker/images/n8n-custom/README.md
+new file mode 100644
+index 0000000000..6b2f76a938
+--- /dev/null
++++ b/docker/images/n8n-custom/README.md
+@@ -0,0 +1,12 @@
++# n8n - Custom Image
++
++Dockerfile which allows to package up the local n8n code into
++a docker image.
++
++## Usage
++
++Execute the following in the n8n root folder:
++
++```bash
++docker build -t n8n-custom -f docker/images/n8n-custom/Dockerfile .
++```
+diff --git a/docker/images/n8n-custom/build-mac.sh b/docker/images/n8n-custom/build-mac.sh
+new file mode 100755
+index 0000000000..d558ff21c2
+--- /dev/null
++++ b/docker/images/n8n-custom/build-mac.sh
+@@ -0,0 +1,5 @@
++#!/bin/bash
++set -eo pipefail
++
++echo "Building patched n8n image"
++docker buildx build -t n8n-patch --platform linux/arm64 -f docker/images/n8n-custom/Dockerfile --build-arg PLATFORM=linux/arm64 .
+diff --git a/docker/images/n8n-custom/build-x86.sh b/docker/images/n8n-custom/build-x86.sh
+new file mode 100755
+index 0000000000..be4278e429
+--- /dev/null
++++ b/docker/images/n8n-custom/build-x86.sh
+@@ -0,0 +1,5 @@
++#!/bin/bash
++set -eo pipefail
++
++echo "Building patched n8n image"
++docker buildx build -t n8n-patch --platform linux/x86_64 -f docker/images/n8n-custom/Dockerfile --build-arg PLATFORM=linux/x86_64 .
+diff --git a/packages/@n8n/backend-common/src/license-state.ts b/packages/@n8n/backend-common/src/license-state.ts
+index ca226c064c..c89704713c 100644
+--- a/packages/@n8n/backend-common/src/license-state.ts
++++ b/packages/@n8n/backend-common/src/license-state.ts
+@@ -27,10 +27,14 @@ export class LicenseState {
+ 	//     core queries
+ 	// --------------------
+ 
+-	isLicensed(feature: BooleanLicenseFeature) {
+-		this.assertProvider();
++	// isLicensed(feature: BooleanLicenseFeature) {
++	// 	this.assertProvider();
+ 
+-		return this.licenseProvider.isLicensed(feature);
++	// 	return this.licenseProvider.isLicensed(feature);
++	// }
++	isLicensed(feature: BooleanLicenseFeature) {
++		// CUSTOM PATCH
++		return true;
+ 	}
+ 
+ 	getValue<T extends keyof FeatureReturnType>(feature: T): FeatureReturnType[T] {
+@@ -171,43 +175,76 @@ export class LicenseState {
+ 	//      integers
+ 	// --------------------
+ 
++	// getMaxUsers() {
++	// 	return this.getValue('quota:users') ?? UNLIMITED_LICENSE_QUOTA;
++	// }
+ 	getMaxUsers() {
+-		return this.getValue('quota:users') ?? UNLIMITED_LICENSE_QUOTA;
++		// CUSTOM PATCH
++		return 10_001;
+ 	}
+ 
++	// getMaxActiveWorkflows() {
++	// 	return this.getValue('quota:activeWorkflows') ?? UNLIMITED_LICENSE_QUOTA;
++	// }
+ 	getMaxActiveWorkflows() {
+-		return this.getValue('quota:activeWorkflows') ?? UNLIMITED_LICENSE_QUOTA;
++		// CUSTOM PATCH
++		return 10_001;
+ 	}
+ 
++	// getMaxVariables() {
++	// 	return this.getValue('quota:maxVariables') ?? UNLIMITED_LICENSE_QUOTA;
++	// }
++
+ 	getMaxVariables() {
+-		return this.getValue('quota:maxVariables') ?? UNLIMITED_LICENSE_QUOTA;
++		// CUSTOM PATCH
++		return 10_001;
+ 	}
+ 
++	// getMaxAiCredits() {
++	// 	return this.getValue('quota:aiCredits') ?? 0;
++	// }
+ 	getMaxAiCredits() {
+-		return this.getValue('quota:aiCredits') ?? 0;
++		// CUSTOM PATCH
++		return 10_000_001;
+ 	}
+ 
+ 	getWorkflowHistoryPruneQuota() {
+-		return this.getValue('quota:workflowHistoryPrune') ?? UNLIMITED_LICENSE_QUOTA;
++		// return this.getValue('quota:workflowHistoryPrune') ?? UNLIMITED_LICENSE_QUOTA;
++		return UNLIMITED_LICENSE_QUOTA;
+ 	}
+ 
+ 	getInsightsMaxHistory() {
+-		return this.getValue('quota:insights:maxHistoryDays') ?? 7;
++		// return this.getValue('quota:insights:maxHistoryDays') ?? 7;
++		// return UNLIMITED_LICENSE_QUOTA;
++		return 30;
+ 	}
+ 
+ 	getInsightsRetentionMaxAge() {
+-		return this.getValue('quota:insights:retention:maxAgeDays') ?? 180;
++		// return this.getValue('quota:insights:retention:maxAgeDays') ?? 180;
++		// return UNLIMITED_LICENSE_QUOTA;
++		return 180;
+ 	}
+ 
+ 	getInsightsRetentionPruneInterval() {
+-		return this.getValue('quota:insights:retention:pruneIntervalDays') ?? 24;
++		// return this.getValue('quota:insights:retention:pruneIntervalDays') ?? 24;
++		// return UNLIMITED_LICENSE_QUOTA;
++		return 120;
+ 	}
+ 
++	// getMaxTeamProjects() {
++	// 	return this.getValue('quota:maxTeamProjects') ?? 0;
++	// }
+ 	getMaxTeamProjects() {
+-		return this.getValue('quota:maxTeamProjects') ?? 0;
++		// CUSTOM PATCH
++		return 10_001;
+ 	}
+ 
++	// getMaxWorkflowsWithEvaluations() {
++	// 	return this.getValue('quota:evaluations:maxWorkflows') ?? 0;
++	// }
+ 	getMaxWorkflowsWithEvaluations() {
+-		return this.getValue('quota:evaluations:maxWorkflows') ?? 0;
++		// return this.getValue('quota:evaluations:maxWorkflows') ?? 0;
++		// CUSTOM PATCH
++		return 10_001;
+ 	}
+ }
+diff --git a/packages/@n8n/config/src/configs/ai-assistant.config.ts b/packages/@n8n/config/src/configs/ai-assistant.config.ts
+index ff8a3986f2..349723805e 100644
+--- a/packages/@n8n/config/src/configs/ai-assistant.config.ts
++++ b/packages/@n8n/config/src/configs/ai-assistant.config.ts
+@@ -1,8 +1,11 @@
+ import { Config, Env } from '../decorators';
+ 
++const DEFAULT_SERVICE_BASE_URL = 'https://ai-assistant.n8n.io';
++
+ @Config
+ export class AiAssistantConfig {
+ 	/** Base URL of the AI assistant service */
+ 	@Env('N8N_AI_ASSISTANT_BASE_URL')
+-	baseUrl: string = '';
++	// baseUrl: string = '';
++	baseUrl: string = DEFAULT_SERVICE_BASE_URL; // CUSTOM PATCH
+ }
+diff --git a/packages/cli/src/license.ts b/packages/cli/src/license.ts
+index 6441f74003..c5057dbbd3 100644
+--- a/packages/cli/src/license.ts
++++ b/packages/cli/src/license.ts
+@@ -217,8 +217,12 @@ export class License implements LicenseProvider {
+ 		this.logger.debug('License shut down');
+ 	}
+ 
++	// isLicensed(feature: BooleanLicenseFeature) {
++	// 	return this.manager?.hasFeatureEnabled(feature) ?? false;
++	// }
+ 	isLicensed(feature: BooleanLicenseFeature) {
+-		return this.manager?.hasFeatureEnabled(feature) ?? false;
++		// CUSTOM PATCH
++		return true;
+ 	}
+ 
+ 	/** @deprecated Use `LicenseState.isSharingLicensed` instead. */
+@@ -413,7 +417,9 @@ export class License implements LicenseProvider {
+ 	}
+ 
+ 	getPlanName(): string {
+-		return this.getValue('planName') ?? 'Community';
++		// return this.getValue('planName') ?? 'Community';
++		// CUSTOM PATCH
++		return 'Enterprise';
+ 	}
+ 
+ 	getInfo(): string {
+diff --git a/packages/cli/src/license/license.service.ts b/packages/cli/src/license/license.service.ts
+index 7f2ebbc37f..b8a6ace9e4 100644
+--- a/packages/cli/src/license/license.service.ts
++++ b/packages/cli/src/license/license.service.ts
+@@ -52,7 +52,9 @@ export class LicenseService {
+ 			},
+ 			license: {
+ 				planId: mainPlan?.productId ?? '',
+-				planName: this.license.getPlanName(),
++				// planName: this.license.getPlanName(),
++				// CUSTOM PATCH
++				planName: 'Enterprise',
+ 			},
+ 		};
+ 	}
+diff --git a/packages/cli/src/modules/insights/insights.service.ts b/packages/cli/src/modules/insights/insights.service.ts
+index 7a956afdfc..d1bb3a4cca 100644
+--- a/packages/cli/src/modules/insights/insights.service.ts
++++ b/packages/cli/src/modules/insights/insights.service.ts
+@@ -243,11 +243,13 @@ export class InsightsService {
+ 	 * when grouped by time.
+ 	 */
+ 	getAvailableDateRanges(): DateRange[] {
+-		const maxHistoryInDays =
+-			this.licenseState.getInsightsMaxHistory() === -1
+-				? Number.MAX_SAFE_INTEGER
+-				: this.licenseState.getInsightsMaxHistory();
+-		const isHourlyDateLicensed = this.licenseState.isInsightsHourlyDataLicensed();
++		// const maxHistoryInDays =
++		// 	this.licenseState.getInsightsMaxHistory() === -1
++		// 		? Number.MAX_SAFE_INTEGER
++		// 		: this.licenseState.getInsightsMaxHistory();
++		const maxHistoryInDays = Number.MAX_SAFE_INTEGER;
++		// const isHourlyDateLicensed = this.licenseState.isInsightsHourlyDataLicensed();
++		const isHourlyDateLicensed = true;
+ 
+ 		return INSIGHTS_DATE_RANGE_KEYS.map((key) => ({
+ 			key,
+diff --git a/packages/cli/src/services/frontend.service.ts b/packages/cli/src/services/frontend.service.ts
+index 65fa8e1b9e..875e1666a9 100644
+--- a/packages/cli/src/services/frontend.service.ts
++++ b/packages/cli/src/services/frontend.service.ts
+@@ -1,7 +1,7 @@
+ import type { FrontendSettings, ITelemetrySettings, N8nEnvFeatFlags } from '@n8n/api-types';
+ import { LicenseState, Logger, ModuleRegistry } from '@n8n/backend-common';
+ import { GlobalConfig, SecurityConfig } from '@n8n/config';
+-import { LICENSE_FEATURES } from '@n8n/constants';
++// import { LICENSE_FEATURES } from '@n8n/constants';
+ import { Container, Service } from '@n8n/di';
+ import { createWriteStream } from 'fs';
+ import { mkdir } from 'fs/promises';
+@@ -171,11 +171,13 @@ export class FrontendService {
+ 			},
+ 			sso: {
+ 				saml: {
+-					loginEnabled: false,
++					// loginEnabled: false,
++					loginEnabled: true,
+ 					loginLabel: '',
+ 				},
+ 				ldap: {
+-					loginEnabled: false,
++					// loginEnabled: false,
++					loginEnabled: true,
+ 					loginLabel: '',
+ 				},
+ 				oidc: {
+@@ -197,9 +199,10 @@ export class FrontendService {
+ 			},
+ 			workflowTagsDisabled: this.globalConfig.tags.disabled,
+ 			logLevel: this.globalConfig.logging.level,
+-			hiringBannerEnabled: this.globalConfig.hiringBanner.enabled,
++			// hiringBannerEnabled: config.getEnv('hiringBanner.enabled'),
++			hiringBannerEnabled: false,
+ 			aiAssistant: {
+-				enabled: false,
++				enabled: true,
+ 				setup: false,
+ 			},
+ 			templates: {
+@@ -221,53 +224,81 @@ export class FrontendService {
+ 				builtIn: process.env.NODE_FUNCTION_ALLOW_BUILTIN?.split(',') ?? undefined,
+ 				external: process.env.NODE_FUNCTION_ALLOW_EXTERNAL?.split(',') ?? undefined,
+ 			},
++			// enterprise: {
++			// 	sharing: false,
++			// 	ldap: false,
++			// 	saml: false,
++			// 	logStreaming: false,
++			// 	advancedExecutionFilters: false,
++			// 	variables: false,
++			// 	sourceControl: false,
++			// 	auditLogs: false,
++			// 	externalSecrets: false,
++			// 	showNonProdBanner: false,
++			// 	debugInEditor: false,
++			// 	binaryDataS3: false,
++			// 	workflowHistory: false,
++			// 	workerView: false,
++			// 	advancedPermissions: false,
++			// 	apiKeyScopes: false,
++			// 	projects: {
++			// 		team: {
++			// 			limit: 0,
++			// 		},
++			// 	},
++			// },
+ 			enterprise: {
+-				sharing: false,
++				sharing: true,
+ 				ldap: false,
+ 				saml: false,
+ 				oidc: false,
+ 				mfaEnforcement: false,
+-				logStreaming: false,
+-				advancedExecutionFilters: false,
+-				variables: false,
+-				sourceControl: false,
+-				auditLogs: false,
+-				externalSecrets: false,
++				logStreaming: true,
++				advancedExecutionFilters: true,
++				variables: true,
++				sourceControl: true,
++				auditLogs: true,
++				externalSecrets: true,
+ 				showNonProdBanner: false,
+-				debugInEditor: false,
+-				binaryDataS3: false,
+-				workflowHistory: false,
+-				workerView: false,
+-				advancedPermissions: false,
+-				apiKeyScopes: false,
+-				workflowDiffs: false,
++				debugInEditor: true,
++				binaryDataS3: true,
++				workerView: true,
++				advancedPermissions: true,
++				apiKeyScopes: true,
++				workflowHistory: true,
++				workflowDiffs: true,
+ 				projects: {
+ 					team: {
+-						limit: 0,
++						limit: 10_000,
+ 					},
+ 				},
+ 			},
+ 			mfa: {
+-				enabled: false,
++				enabled: true,
+ 				enforced: false,
+ 			},
+-			hideUsagePage: this.globalConfig.hideUsagePage,
++			// hideUsagePage: this.globalConfig.hideUsagePage,
++			hideUsagePage: false,
+ 			license: {
+ 				consumerId: 'unknown',
+-				environment: this.globalConfig.license.tenantId === 1 ? 'production' : 'staging',
++				// environment: this.globalConfig.license.tenantId === 1 ? 'production' : 'staging',
++				environment: 'development',
+ 			},
+ 			variables: {
+-				limit: 0,
++				limit: 10_000,
+ 			},
+ 			banners: {
+ 				dismissed: [],
+ 			},
+ 			askAi: {
+-				enabled: false,
++				// enabled: false,
++				enabled: true,
+ 			},
+ 			aiCredits: {
+-				enabled: false,
+-				credits: 0,
++				// enabled: false,
++				// credits: 0,
++				enabled: true,
++				credits: 1_000_000_000,
+ 			},
+ 			workflowHistory: {
+ 				pruneTime: -1,
+@@ -283,7 +314,8 @@ export class FrontendService {
+ 			},
+ 			easyAIWorkflowOnboarded: false,
+ 			folders: {
+-				enabled: false,
++				// enabled: false,
++				enabled: true,
+ 			},
+ 			evaluation: {
+ 				quota: this.licenseState.getMaxWorkflowsWithEvaluations(),
+@@ -338,38 +370,40 @@ export class FrontendService {
+ 			this.settings.easyAIWorkflowOnboarded = false;
+ 		}
+ 
+-		const isS3Selected = this.binaryDataConfig.mode === 's3';
+-		const isS3Available = this.binaryDataConfig.availableModes.includes('s3');
+-		const isS3Licensed = this.license.isBinaryDataS3Licensed();
+-		const isAiAssistantEnabled = this.license.isAiAssistantEnabled();
+-		const isAskAiEnabled = this.license.isAskAiEnabled();
+-		const isAiCreditsEnabled = this.license.isAiCreditsEnabled();
+-
+-		this.settings.license.planName = this.license.getPlanName();
++		// const isS3Selected = this.binaryDataConfig.mode === 's3';
++		// const isS3Available = this.binaryDataConfig.availableModes.includes('s3');
++		// const isS3Licensed = this.license.isBinaryDataS3Licensed();
++		// const isAiAssistantEnabled = this.license.isAiAssistantEnabled();
++		const isAiAssistantEnabled = true;
++		// const isAskAiEnabled = this.license.isAskAiEnabled();
++		const isAskAiEnabled = true;
++		// const isAiCreditsEnabled = this.license.isAiCreditsEnabled();
++		const isAiCreditsEnabled = true;
++
++		// this.settings.license.planName = this.license.getPlanName();
++		this.settings.license.planName = 'Enterprise';
+ 		this.settings.license.consumerId = this.license.getConsumerId();
+ 
+ 		// refresh enterprise status
+-		Object.assign(this.settings.enterprise, {
+-			sharing: this.license.isSharingEnabled(),
+-			logStreaming: this.license.isLogStreamingEnabled(),
+-			ldap: this.license.isLdapEnabled(),
+-			saml: this.license.isSamlEnabled(),
+-			oidc: this.licenseState.isOidcLicensed(),
+-			mfaEnforcement: this.licenseState.isMFAEnforcementLicensed(),
+-			advancedExecutionFilters: this.license.isAdvancedExecutionFiltersEnabled(),
+-			variables: this.license.isVariablesEnabled(),
+-			sourceControl: this.license.isSourceControlLicensed(),
+-			externalSecrets: this.license.isExternalSecretsEnabled(),
+-			showNonProdBanner: this.license.isLicensed(LICENSE_FEATURES.SHOW_NON_PROD_BANNER),
+-			debugInEditor: this.license.isDebugInEditorLicensed(),
+-			binaryDataS3: isS3Available && isS3Selected && isS3Licensed,
+-			workflowHistory:
+-				this.license.isWorkflowHistoryLicensed() && this.globalConfig.workflowHistory.enabled,
+-			workerView: this.license.isWorkerViewLicensed(),
+-			advancedPermissions: this.license.isAdvancedPermissionsLicensed(),
+-			apiKeyScopes: this.license.isApiKeyScopesEnabled(),
+-			workflowDiffs: this.licenseState.isWorkflowDiffsLicensed(),
+-		});
++		// Object.assign(this.settings.enterprise, {
++		// 	sharing: this.license.isSharingEnabled(),
++		// 	logStreaming: this.license.isLogStreamingEnabled(),
++		// 	ldap: this.license.isLdapEnabled(),
++		// 	saml: this.license.isSamlEnabled(),
++		// 	advancedExecutionFilters: this.license.isAdvancedExecutionFiltersEnabled(),
++		// 	variables: this.license.isVariablesEnabled(),
++		// 	sourceControl: this.license.isSourceControlLicensed(),
++		// 	externalSecrets: this.license.isExternalSecretsEnabled(),
++		// 	// showNonProdBanner: this.license.isLicensed(LICENSE_FEATURES.SHOW_NON_PROD_BANNER),
++		// 	showNonProdBanner: false,
++		// 	debugInEditor: this.license.isDebugInEditorLicensed(),
++		// 	binaryDataS3: isS3Available && isS3Selected && isS3Licensed,
++		// 	workflowHistory:
++		// 		this.license.isWorkflowHistoryLicensed() && this.globalConfig.workflowHistory.enabled,
++		// 	workerView: this.license.isWorkerViewLicensed(),
++		// 	advancedPermissions: this.license.isAdvancedPermissionsLicensed(),
++		// 	apiKeyScopes: this.license.isApiKeyScopesEnabled(),
++		// });
+ 
+ 		if (this.license.isLdapEnabled()) {
+ 			Object.assign(this.settings.sso.ldap, {
+@@ -429,9 +463,9 @@ export class FrontendService {
+ 
+ 		this.settings.binaryDataMode = this.binaryDataConfig.mode;
+ 
+-		this.settings.enterprise.projects.team.limit = this.license.getTeamProjectLimit();
++		// this.settings.enterprise.projects.team.limit = this.license.getTeamProjectLimit();
+ 
+-		this.settings.folders.enabled = this.license.isFoldersEnabled();
++		// this.settings.folders.enabled = this.license.isFoldersEnabled();
+ 
+ 		// Refresh evaluation settings
+ 		this.settings.evaluation.quota = this.licenseState.getMaxWorkflowsWithEvaluations();
+diff --git a/packages/frontend/@n8n/chat/package.json b/packages/frontend/@n8n/chat/package.json
+index 8c9b8743fe..963b946400 100644
+--- a/packages/frontend/@n8n/chat/package.json
++++ b/packages/frontend/@n8n/chat/package.json
+@@ -4,8 +4,8 @@
+   "scripts": {
+     "dev": "pnpm run storybook",
+     "build": "pnpm build:vite && pnpm build:bundle",
+-    "build:vite": "cross-env vite build",
+-    "build:bundle": "cross-env INCLUDE_VUE=true vite build",
++    "build:vite": "cross-env NODE_OPTIONS=\"--max-old-space-size=4096\" vite build",
++    "build:bundle": "cross-env INCLUDE_VUE=true NODE_OPTIONS=\"--max-old-space-size=4096\" vite build",
+     "preview": "vite preview",
+     "test:dev": "vitest",
+     "test": "vitest run",
+diff --git a/packages/frontend/editor-ui/src/components/Telemetry.vue b/packages/frontend/editor-ui/src/components/Telemetry.vue
+index 742ff4b18e..a7fa82177b 100644
+--- a/packages/frontend/editor-ui/src/components/Telemetry.vue
++++ b/packages/frontend/editor-ui/src/components/Telemetry.vue
+@@ -30,8 +30,12 @@ const telemetry = computed((): ITelemetrySettings => {
+ 	return settingsStore.telemetry;
+ });
+ 
++// const isTelemetryEnabled = computed((): boolean => {
++// 	return !!telemetry.value?.enabled;
++// });
++// CUSTOM PATCH
+ const isTelemetryEnabled = computed((): boolean => {
+-	return !!telemetry.value?.enabled;
++	return false;
+ });
+ 
+ const selfInstallSrc = computed((): string => {
+diff --git a/packages/frontend/editor-ui/src/components/banners/NonProductionLicenseBanner.vue b/packages/frontend/editor-ui/src/components/banners/NonProductionLicenseBanner.vue
+index abbab0e9da..198060c975 100644
+--- a/packages/frontend/editor-ui/src/components/banners/NonProductionLicenseBanner.vue
++++ b/packages/frontend/editor-ui/src/components/banners/NonProductionLicenseBanner.vue
+@@ -4,7 +4,7 @@ import { i18n as locale } from '@n8n/i18n';
+ </script>
+ 
+ <template>
+-	<BaseBanner name="NON_PRODUCTION_LICENSE" :dismissible="false">
++	<BaseBanner name="NON_PRODUCTION_LICENSE" :dismissible="true">
+ 		<template #mainContent>
+ 			<span>{{ locale.baseText('banners.nonProductionLicense.message') }}</span>
+ 		</template>
+diff --git a/packages/frontend/editor-ui/src/init.ts b/packages/frontend/editor-ui/src/init.ts
+index e986e966e1..85aa7ae7cb 100644
+--- a/packages/frontend/editor-ui/src/init.ts
++++ b/packages/frontend/editor-ui/src/init.ts
+@@ -98,9 +98,9 @@ export async function initializeCore() {
+ 	});
+ 
+ 	const banners: BannerName[] = [];
+-	if (settingsStore.isEnterpriseFeatureEnabled.showNonProdBanner) {
+-		banners.push('NON_PRODUCTION_LICENSE');
+-	}
++	// if (settingsStore.isEnterpriseFeatureEnabled.showNonProdBanner) {
++	// 	banners.push('NON_PRODUCTION_LICENSE');
++	// }
+ 	if (
+ 		!(settingsStore.settings.banners?.dismissed || []).includes('V1') &&
+ 		settingsStore.settings.versionCli.startsWith('1.')
+diff --git a/packages/frontend/editor-ui/src/router.ts b/packages/frontend/editor-ui/src/router.ts
+index 8777d049bf..e01506bcc3 100644
+--- a/packages/frontend/editor-ui/src/router.ts
++++ b/packages/frontend/editor-ui/src/router.ts
+@@ -297,7 +297,12 @@ export const routes: RouteRecordRaw[] = [
+ 		},
+ 		meta: {
+ 			keepWorkflowAlive: true,
++			// middleware: ['authenticated', 'custom'],
++			// CUSTOM PATCH
+ 			middleware: ['authenticated'],
++			// middlewareOptions: {
++			// 	custom: () => useEvaluationStore().isFeatureEnabled,
++			// },
+ 		},
+ 		children: [
+ 			{
+@@ -511,13 +516,15 @@ export const routes: RouteRecordRaw[] = [
+ 					settingsView: SettingsUsageAndPlan,
+ 				},
+ 				meta: {
+-					middleware: ['authenticated', 'custom'],
+-					middlewareOptions: {
+-						custom: () => {
+-							const settingsStore = useSettingsStore();
+-							return !settingsStore.settings.hideUsagePage;
+-						},
+-					},
++					// middleware: ['authenticated', 'custom'],
++					// CUSTOM PATCH
++					middleware: ['authenticated'],
++					// middlewareOptions: {
++					// 	custom: () => {
++					// 		const settingsStore = useSettingsStore();
++					// 		return !settingsStore.settings.hideUsagePage;
++					// 	},
++					// },
+ 					telemetry: {
+ 						pageCategory: 'settings',
+ 						getProperties() {
+@@ -691,19 +698,21 @@ export const routes: RouteRecordRaw[] = [
+ 					settingsView: SettingsCommunityNodesView,
+ 				},
+ 				meta: {
+-					middleware: ['authenticated', 'rbac', 'custom'],
+-					middlewareOptions: {
+-						rbac: {
+-							scope: ['communityPackage:list', 'communityPackage:update'],
+-						},
+-						custom: () => {
+-							const settingsStore = useSettingsStore();
+-							return settingsStore.isCommunityNodesFeatureEnabled;
+-						},
+-					},
+-					telemetry: {
+-						pageCategory: 'settings',
+-					},
++					// middleware: ['authenticated', 'rbac', 'custom'],
++					// CUSTOM PATCH
++					middleware: ['authenticated', 'rbac'],
++					// middlewareOptions: {
++					// 	rbac: {
++					// 		scope: ['communityPackage:list', 'communityPackage:update'],
++					// 	},
++					// 	custom: () => {
++					// 		const settingsStore = useSettingsStore();
++					// 		return settingsStore.isCommunityNodesFeatureEnabled;
++					// 	},
++					// },
++					// telemetry: {
++					// 	pageCategory: 'settings',
++					// },
+ 				},
+ 			},
+ 			{
+@@ -730,17 +739,19 @@ export const routes: RouteRecordRaw[] = [
+ 			default: SamlOnboarding,
+ 		},
+ 		meta: {
+-			middleware: ['authenticated', 'custom'],
+-			middlewareOptions: {
+-				custom: () => {
+-					const settingsStore = useSettingsStore();
+-					const ssoStore = useSSOStore();
+-					return ssoStore.isEnterpriseSamlEnabled && !settingsStore.isCloudDeployment;
+-				},
+-			},
+-			telemetry: {
+-				pageCategory: 'auth',
+-			},
++			// middleware: ['authenticated', 'custom'],
++			// CUSTOM PATCH
++			middleware: ['authenticated'],
++			// middlewareOptions: {
++			// 	custom: () => {
++			// 		const settingsStore = useSettingsStore();
++			// 		const ssoStore = useSSOStore();
++			// 		return ssoStore.isEnterpriseSamlEnabled && !settingsStore.isCloudDeployment;
++			// 	},
++			// },
++			// telemetry: {
++			// 	pageCategory: 'auth',
++			// },
+ 		},
+ 	},
+ 	...projectsRoutes,
+diff --git a/packages/frontend/editor-ui/src/stores/settings.store.ts b/packages/frontend/editor-ui/src/stores/settings.store.ts
+index 4e1ef4bfac..d89cbf5d10 100644
+--- a/packages/frontend/editor-ui/src/stores/settings.store.ts
++++ b/packages/frontend/editor-ui/src/stores/settings.store.ts
+@@ -118,7 +118,9 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
+ 	const logLevel = computed(() => settings.value.logLevel);
+ 
+ 	const isTelemetryEnabled = computed(
+-		() => settings.value.telemetry && settings.value.telemetry.enabled,
++		// () => settings.value.telemetry && settings.value.telemetry.enabled,
++		// CUSTOM PATCH
++		() => false,
+ 	);
+ 
+ 	const isMFAEnforcementLicensed = computed(() => {
+@@ -166,9 +168,19 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
+ 
+ 	const permanentlyDismissedBanners = computed(() => settings.value.banners?.dismissed ?? []);
+ 
+-	const isCommunityPlan = computed(() => planName.value.toLowerCase() === 'community');
++	// const isBelowUserQuota = computed(
++	// 	(): boolean =>
++	// 		userManagement.value.quota === -1 ||
++	// 		userManagement.value.quota > useUsersStore().allUsers.length,
++	// );
++	// CUSTOM PATCH
++	// const isBelowUserQuota = computed((): boolean => true);
+ 
+-	const isDevRelease = computed(() => settings.value.releaseChannel === 'dev');
++	// const isCommunityPlan = computed(() => planName.value.toLowerCase() === 'community');
++	const isCommunityPlan = false;
++
++	// const isDevRelease = computed(() => settings.value.releaseChannel === 'dev');
++	const isDevRelease = false;
+ 
+ 	const setSettings = (newSettings: FrontendSettings) => {
+ 		settings.value = newSettings;
+@@ -180,7 +192,8 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
+ 		}
+ 		api.value = settings.value.publicApi;
+ 		mfa.value.enabled = settings.value.mfa?.enabled;
+-		folders.value.enabled = settings.value.folders?.enabled;
++		// folders.value.enabled = settings.value.folders?.enabled;
++		folders.value.enabled = true;
+ 
+ 		if (settings.value.versionCli) {
+ 			useRootStore().setVersionCli(settings.value.versionCli);
+@@ -252,9 +265,9 @@ export const useSettingsStore = defineStore(STORES.SETTINGS, () => {
+ 		rootStore.setDefaultLocale(fetchedSettings.defaultLocale);
+ 		rootStore.setBinaryDataMode(fetchedSettings.binaryDataMode);
+ 
+-		if (fetchedSettings.telemetry.enabled) {
+-			void eventsApi.sessionStarted(rootStore.restApiContext);
+-		}
++		// if (fetchedSettings.telemetry.enabled) {
++		// 	void eventsApi.sessionStarted(rootStore.restApiContext);
++		// }
+ 	};
+ 
+ 	const initialize = async () => {
+diff --git a/packages/frontend/editor-ui/src/utils/rbac/checks/hasRole.ts b/packages/frontend/editor-ui/src/utils/rbac/checks/hasRole.ts
+index d92b776343..faa34a2757 100644
+--- a/packages/frontend/editor-ui/src/utils/rbac/checks/hasRole.ts
++++ b/packages/frontend/editor-ui/src/utils/rbac/checks/hasRole.ts
+@@ -1,15 +1,19 @@
+-import { useUsersStore } from '@/stores/users.store';
++// import { useUsersStore } from '@/stores/users.store';
+ import type { RBACPermissionCheck, RolePermissionOptions } from '@/types/rbac';
+-import { ROLE, type Role } from '@n8n/api-types';
++// import { ROLE, type Role } from '@n8n/api-types';
+ 
+-export const hasRole: RBACPermissionCheck<RolePermissionOptions> = (checkRoles) => {
+-	const usersStore = useUsersStore();
+-	const currentUser = usersStore.currentUser;
++// export const hasRole: RBACPermissionCheck<RolePermissionOptions> = (checkRoles) => {
++// 	const usersStore = useUsersStore();
++// 	const currentUser = usersStore.currentUser;
+ 
+-	if (currentUser && checkRoles) {
+-		const userRole = currentUser.isDefaultUser ? ROLE.Default : currentUser.role;
+-		return checkRoles.includes(userRole as Role);
+-	}
++// 	if (currentUser && checkRoles) {
++// 		const userRole = currentUser.isDefaultUser ? ROLE.Default : currentUser.role;
++// 		return checkRoles.includes(userRole as IRole);
++// 	}
+ 
+-	return false;
++// 	return false;
++// };
++export const hasRole: RBACPermissionCheck<RolePermissionOptions> = (checkRoles) => {
++	return true;
++	// CUSTOM PATCH
+ };
+diff --git a/packages/frontend/editor-ui/src/utils/rbac/checks/hasScope.ts b/packages/frontend/editor-ui/src/utils/rbac/checks/hasScope.ts
+index 60ba995de0..08ac37f411 100644
+--- a/packages/frontend/editor-ui/src/utils/rbac/checks/hasScope.ts
++++ b/packages/frontend/editor-ui/src/utils/rbac/checks/hasScope.ts
+@@ -1,20 +1,25 @@
+ import { useRBACStore } from '@/stores/rbac.store';
+ import type { RBACPermissionCheck, RBACPermissionOptions } from '@/types/rbac';
+ 
+-export const hasScope: RBACPermissionCheck<RBACPermissionOptions> = (opts) => {
+-	if (!opts?.scope) {
+-		return true;
+-	}
+-	const { projectId, resourceType, resourceId, scope, options } = opts;
++// export const hasScope: RBACPermissionCheck<RBACPermissionOptions> = (opts) => {
++// 	if (!opts?.scope) {
++// 		return true;
++// 	}
++// 	const { projectId, resourceType, resourceId, scope, options } = opts;
+ 
+-	const rbacStore = useRBACStore();
+-	return rbacStore.hasScope(
+-		scope,
+-		{
+-			projectId,
+-			resourceType,
+-			resourceId,
+-		},
+-		options,
+-	);
++// 	const rbacStore = useRBACStore();
++// 	return rbacStore.hasScope(
++// 		scope,
++// 		{
++// 			projectId,
++// 			resourceType,
++// 			resourceId,
++// 		},
++// 		options,
++// 	);
++// };
++//
++// CUSTOM PATCH
++export const hasScope: RBACPermissionCheck<RBACPermissionOptions> = (opts) => {
++	return true;
+ };
+diff --git a/packages/frontend/editor-ui/src/utils/rbac/checks/isEnterpriseFeatureEnabled.ts b/packages/frontend/editor-ui/src/utils/rbac/checks/isEnterpriseFeatureEnabled.ts
+index 996a04bcd5..83b80e00fb 100644
+--- a/packages/frontend/editor-ui/src/utils/rbac/checks/isEnterpriseFeatureEnabled.ts
++++ b/packages/frontend/editor-ui/src/utils/rbac/checks/isEnterpriseFeatureEnabled.ts
+@@ -1,19 +1,25 @@
+ import { useSettingsStore } from '@/stores/settings.store';
+ import type { RBACPermissionCheck, EnterprisePermissionOptions } from '@/types/rbac';
+ 
++// export const isEnterpriseFeatureEnabled: RBACPermissionCheck<EnterprisePermissionOptions> = (
++// 	options,
++// ) => {
++// 	if (!options?.feature) {
++// 		return true;
++// 	}
++
++// 	const features = Array.isArray(options.feature) ? options.feature : [options.feature];
++// 	const settingsStore = useSettingsStore();
++// 	const mode = options.mode ?? 'allOf';
++// 	if (mode === 'allOf') {
++// 		return features.every((feature) => settingsStore.isEnterpriseFeatureEnabled[feature]);
++// 	} else {
++// 		return features.some((feature) => settingsStore.isEnterpriseFeatureEnabled[feature]);
++// 	}
++// };
++// CUSTOM PATCH
+ export const isEnterpriseFeatureEnabled: RBACPermissionCheck<EnterprisePermissionOptions> = (
+ 	options,
+ ) => {
+-	if (!options?.feature) {
+-		return true;
+-	}
+-
+-	const features = Array.isArray(options.feature) ? options.feature : [options.feature];
+-	const settingsStore = useSettingsStore();
+-	const mode = options.mode ?? 'allOf';
+-	if (mode === 'allOf') {
+-		return features.every((feature) => settingsStore.isEnterpriseFeatureEnabled[feature]);
+-	} else {
+-		return features.some((feature) => settingsStore.isEnterpriseFeatureEnabled[feature]);
+-	}
++	return true;
+ };
+diff --git a/scripts/dockerize-n8n.mjs b/scripts/dockerize-n8n.mjs
+index 9d7ca8d792..36d2d5bd69 100755
+--- a/scripts/dockerize-n8n.mjs
++++ b/scripts/dockerize-n8n.mjs
+@@ -32,7 +32,8 @@ function getDockerPlatform() {
+ 		throw new Error(`Unsupported architecture: ${arch}. Only x64 and arm64 are supported.`);
+ 	}
+ 
+-	return `linux/${dockerArch}`;
++	// return `linux/${dockerArch}`;
++	return `linux/amd64`;
+ }
+ 
+ /**
