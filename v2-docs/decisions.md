@@ -12,6 +12,12 @@ Log of what we decided and why. Add new rows at the bottom. Do not re-ask closed
 | 2026-10-10 | Never print or commit `.env.local` values. `.env.local` is gitignored. Non-secret mirror lives in `.env.local.example`. | Global no-secrets rule. |
 | 2026-10-11 | Owner allows editing `.env.local` (not committing). | Owner instruction. |
 
+## Tests
+
+| Date | Decision | Why |
+|---|---|---|
+| 2026-10-11 | Ignore unit tests on `custom.v2`. Do not run them, fix them, or write them. If a custom patch changes logic as the spec says, a failing or stale test is fine. Do not edit tests to match. Only the features working as specified matters. | Owner instruction. Personal build. Tests that assert upstream behavior only cost time. |
+
 ## Licensing
 
 | Date | Decision | Why |

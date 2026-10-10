@@ -116,3 +116,19 @@ Skipped: all FE RBAC, router, SSO, and MFA edits.
 | Q1 | Done by owner (Actions off in repo settings). No rename. |
 | Q9 | Runtime audit light and deferred (backlog B4). |
 | Phase I commits | 1) L1-L3 license state. 2) L4-L6 quotas. 3) L7-L8 license server and FE buttons. 4) auditLogs force. 5) diagnostics default. 6) security audit local (S1). |
+
+## I. Phase I status (2026-10-11)
+
+| # | Commit | Status | Where | Differs from plan |
+|---|---|---|---|---|
+| 1 | `f6c66cf3bf` license state (L1-L3) | done | `packages/cli/src/license.ts` `isLicensed`, `getPlanName` | No FE change: `frontend.service.ts:572` reads `isLicensed`, so it gets false. |
+| 2 | `ba98f91973` quotas (L4-L6) | done | `license.ts` `CUSTOM_QUOTAS` map used by `getValue` | Map is a module constant. Retention keys set to `-1` per brief (telemetry-only consumers). |
+| 3 | `18c72a8c46` license server (L7-L8) | done | `license.ts` `License.licenseServerDisabled`, `init()`; `license/license.service.ts` two methods; FE `SettingsUsageAndPlan.vue` `canUserActivateLicense` | A static flag (not a plain edit) gates `init()` so the original code stays intact. `activate`/`renew`/`renewIfDue` were already no-ops without a manager. FE: only the Activate button existed. No "request trial" button exists. Community-plus modal shows only when unlicensed, so it stays hidden. |
+| 4 | `bee424ae60` audit logs | done | `frontend.service.ts` settings refresh (`auditLogs: true`) | none |
+| 5 | `bd0d6e5195` diagnostics default | done | `diagnostics.config.ts` `enabled = false`; `config.test.ts` default | 3 tests in `config.test.ts` fail on Windows paths (`uploadDir`). They failed before the patch too. Ignored per owner rule. |
+| 6 | `79b363409b` security audit local | done | `instance-risk-reporter.ts` `VERSION_CHECK_DISABLED` flag in `getOutdatedState()` | Used a flag, not commented-out code, so no imports became unused. Tests for this reporter were not updated (owner rule: ignore unit tests). |
+
+Known side effects (not fixed, by scope):
+- `?key=` on the usage page URL calls activate. Backend does nothing and the UI shows "success". Do not use it.
+- The "Plans" / "Manage plan" buttons still link to n8n.io. They are plain links.
+- Tests asserting upstream behavior fail or are stale: `license.test.ts` (partly updated in commits 1-3), `instance-risk-reporter` unit and integration tests.

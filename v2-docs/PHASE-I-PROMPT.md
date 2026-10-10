@@ -83,6 +83,8 @@ Do this after Phase I. Source: `v2-docs/research/r8-docker.md`, backlog B5.
 
 ## 5. Verification (light, by design)
 
+**Owner rule (2026-10-11): ignore unit tests.** Do not run them, fix them, or write them. A test that fails because of a custom patch is expected. The skipped test steps below are superseded. Commits 1 to 3 already include test edits. Do not extend that. Format and lint on changed files still apply.
+
 The owner does not want a full run or E2E suite. Use the cheapest check that is sufficient:
 - After each commit, re-read `git diff HEAD~1` (the diff is truth, not your summary).
 - Run `pnpm exec biome format` and `pnpm exec eslint` on the changed files only (explicit paths). Follow `AGENTS.md` "Verify changes".

@@ -32,5 +32,6 @@
 - `v2-docs/patch-inventory.md`: every custom patch, status, and v1 mapping.
 - `v2-docs/backlog.md`: deferred work and re-check items (engine-v2, instance-reporting, runtime egress audit, Docker phase).
 - `v2-docs/research/`: R1 to R11 evidence (commit `55b3f5ac9e`).
+- **Unit tests: ignore them** (owner decision 2026-10-11). Do not run, fix, or write unit tests on `custom.v2`. A failing test caused by a custom patch is expected. Check features by reading the diff and by hand. See `v2-docs/decisions.md` "Tests".
 - Mark each custom code change `// CUSTOM PATCH` and keep the original line commented above it. Find them with `git grep -n "CUSTOM PATCH"`.
 - On every n8n version bump, re-check the backlog items marked "re-check on bump".
