@@ -25,3 +25,12 @@
 - Config classes: `packages/@n8n/config/src/configs/*.ts`.
 - Removed/renamed vars: `packages/cli/src/deprecation/deprecation.service.ts`, `packages/cli/BREAKING-CHANGES.md`.
 - Port of v1 `custom` patches: not done. See `custom.md` (v1 notes) before porting.
+
+# v2 custom work (read before changing anything under `custom.v2`)
+
+- `v2-docs/decisions.md`: owner decisions and why. Follow them. Do not re-ask.
+- `v2-docs/patch-inventory.md`: every custom patch, status, and v1 mapping.
+- `v2-docs/backlog.md`: deferred work and re-check items (engine-v2, instance-reporting, runtime egress audit, Docker phase).
+- `v2-docs/research/`: R1 to R11 evidence (commit `55b3f5ac9e`).
+- Mark each custom code change `// CUSTOM PATCH` and keep the original line commented above it. Find them with `git grep -n "CUSTOM PATCH"`.
+- On every n8n version bump, re-check the backlog items marked "re-check on bump".
