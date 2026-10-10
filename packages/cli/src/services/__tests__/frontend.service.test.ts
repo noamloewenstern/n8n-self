@@ -588,6 +588,14 @@ describe('FrontendService', () => {
 			expect(settings.enterprise.otelCustomSpanAttributes).toBe(true);
 		});
 
+		// CUSTOM PATCH: the audit logs flag is forced on.
+		it('should force the audit logs flag on', async () => {
+			const { service } = createMockService();
+			const settings = await service.getSettings();
+
+			expect(settings.enterprise.auditLogs).toBe(true);
+		});
+
 		it('should enable worker pools when both the config flag and the license are on', async () => {
 			globalConfig.queue = { workerPool: { enabled: true } } as GlobalConfig['queue'];
 			licenseState.isWorkerPoolsLicensed.mockReturnValue(true);

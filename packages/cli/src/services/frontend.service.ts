@@ -560,6 +560,8 @@ export class FrontendService {
 			saml: this.license.isSamlEnabled(),
 			oidc: this.licenseState.isOidcLicensed(),
 			mfaEnforcement: this.licenseState.isMFAEnforcementLicensed(),
+			// CUSTOM PATCH: force the audit logs flag on. The refresh never set it.
+			auditLogs: true,
 			provisioning: false, // temporarily disabled until this feature is ready for release
 			// oxlint-disable-next-line typescript/no-deprecated
 			advancedExecutionFilters: this.license.isAdvancedExecutionFiltersEnabled(),
