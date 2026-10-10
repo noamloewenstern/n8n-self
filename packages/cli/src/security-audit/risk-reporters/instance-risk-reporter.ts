@@ -21,6 +21,9 @@ import { toFlaggedNode } from '@/security-audit/utils';
 
 const REQUEST_TIMEOUT_MS = 30 * Time.seconds.toMilliseconds;
 
+// CUSTOM PATCH: skip the version check. It would send the instance ID to the versions endpoint.
+const VERSION_CHECK_DISABLED = true;
+
 @Service()
 export class InstanceRiskReporter implements RiskReporter {
 	private readonly http: HttpRequestClient;
@@ -188,6 +191,9 @@ export class InstanceRiskReporter implements RiskReporter {
 	}
 
 	private async getOutdatedState() {
+		// CUSTOM PATCH: report no outdated state and make no request. The code below stays for reference.
+		if (VERSION_CHECK_DISABLED) return null;
+
 		let versions = [];
 
 		const localVersion = N8N_VERSION;
