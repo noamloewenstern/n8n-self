@@ -299,7 +299,12 @@ export class License implements LicenseProvider {
 	}
 
 	isLicensed(feature: BooleanLicenseFeature) {
-		return this.manager?.hasFeatureEnabled(feature) ?? false;
+		// CUSTOM PATCH: every feature is licensed, except the two inverted flags.
+		// return this.manager?.hasFeatureEnabled(feature) ?? false;
+		// API_DISABLED and SHOW_NON_PROD_BANNER turn things off or add a banner when true.
+		return (
+			feature !== LICENSE_FEATURES.API_DISABLED && feature !== LICENSE_FEATURES.SHOW_NON_PROD_BANNER
+		);
 	}
 
 	isCertValid(): boolean {
@@ -500,7 +505,9 @@ export class License implements LicenseProvider {
 	}
 
 	getPlanName(): string {
-		return this.getValue('planName') ?? 'Community';
+		// CUSTOM PATCH: always report the Enterprise plan.
+		// return this.getValue('planName') ?? 'Community';
+		return 'Enterprise';
 	}
 
 	getExpiryDate(): Date | null {
