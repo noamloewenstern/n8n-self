@@ -596,7 +596,8 @@ describe('GlobalConfig', () => {
 			preExecuteErrorCreatesExecution: false,
 		},
 		diagnostics: {
-			enabled: true,
+			// CUSTOM PATCH: diagnostics default to false.
+			enabled: false,
 			frontendConfig: '1zPn9bgWPzlQc0p8Gj1uiK6DOTn;https://telemetry.n8n.io',
 			backendConfig: '1zPn7YoGC3ZXE9zLeTKLuQCB4F6;https://telemetry.n8n.io',
 			posthogConfig: {
