@@ -36,6 +36,22 @@ export type FeatureReturnType = Partial<
 
 type LicenseRefreshCallback = (cert: string) => void;
 
+// CUSTOM PATCH: unlimited quotas. Users must stay exactly -1: any positive value
+// blocks non-owner login and invites. AI credits must stay positive: the UI shows the number.
+const CUSTOM_QUOTAS: Partial<Record<keyof FeatureReturnType, number>> = {
+	[LICENSE_QUOTAS.USERS_LIMIT]: UNLIMITED_LICENSE_QUOTA,
+	[LICENSE_QUOTAS.TRIGGER_LIMIT]: UNLIMITED_LICENSE_QUOTA,
+	[LICENSE_QUOTAS.VARIABLES_LIMIT]: UNLIMITED_LICENSE_QUOTA,
+	[LICENSE_QUOTAS.TEAM_PROJECT_LIMIT]: UNLIMITED_LICENSE_QUOTA,
+	[LICENSE_QUOTAS.INSIGHTS_MAX_HISTORY_DAYS]: UNLIMITED_LICENSE_QUOTA,
+	[LICENSE_QUOTAS.INSIGHTS_RETENTION_MAX_AGE_DAYS]: UNLIMITED_LICENSE_QUOTA,
+	[LICENSE_QUOTAS.INSIGHTS_RETENTION_PRUNE_INTERVAL_DAYS]: UNLIMITED_LICENSE_QUOTA,
+	[LICENSE_QUOTAS.WORKFLOW_HISTORY_PRUNE_LIMIT]: UNLIMITED_LICENSE_QUOTA,
+	[LICENSE_QUOTAS.WORKFLOWS_WITH_EVALUATION_LIMIT]: UNLIMITED_LICENSE_QUOTA,
+	[LICENSE_QUOTAS.EVALUATION_CONCURRENCY_LIMIT]: UNLIMITED_LICENSE_QUOTA,
+	[LICENSE_QUOTAS.AI_CREDITS]: 1_000_000_000,
+};
+
 @Service()
 export class License implements LicenseProvider {
 	private manager: LicenseManager | undefined;
@@ -435,7 +451,10 @@ export class License implements LicenseProvider {
 	}
 
 	getValue<T extends keyof FeatureReturnType>(feature: T): FeatureReturnType[T] {
-		return this.manager?.getFeatureValue(feature) as FeatureReturnType[T];
+		// CUSTOM PATCH: fixed quota values.
+		// return this.manager?.getFeatureValue(feature) as FeatureReturnType[T];
+		return (CUSTOM_QUOTAS[feature] ??
+			this.manager?.getFeatureValue(feature)) as FeatureReturnType[T];
 	}
 
 	getManagementJwt(): string {
