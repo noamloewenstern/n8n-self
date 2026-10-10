@@ -6,10 +6,11 @@ import type { User } from '@n8n/db';
 import { WorkflowRepository } from '@n8n/db';
 import { Service } from '@n8n/di';
 import { ensureError } from '@n8n/utils/errors/ensure-error';
+import { UserError } from 'n8n-workflow';
 
 import { BadRequestError } from '@n8n/errors';
 import { LicenseEulaRequiredError } from '@/errors/response-errors/license-eula-required.error';
-import { License } from '@/license';
+import { License, LICENSE_DISABLED_MESSAGE } from '@/license';
 
 const REQUEST_TIMEOUT_MS = 30 * Time.seconds.toMilliseconds;
 
@@ -68,6 +69,8 @@ export class LicenseService {
 	}
 
 	async requestEnterpriseTrial(user: User) {
+		// CUSTOM PATCH: no call to enterprise.n8n.io.
+		if (License.licenseServerDisabled) throw new UserError(LICENSE_DISABLED_MESSAGE);
 		await this.http.request({
 			url: 'https://enterprise.n8n.io/enterprise-trial',
 			method: 'POST',
@@ -95,6 +98,8 @@ export class LicenseService {
 		instanceUrl: string;
 		licenseType: string;
 	}): Promise<{ title: string; text: string }> {
+		// CUSTOM PATCH: no call to enterprise.n8n.io.
+		if (License.licenseServerDisabled) throw new UserError(LICENSE_DISABLED_MESSAGE);
 		try {
 			const { licenseKey, ...rest } = await this.http.request<{
 				title: string;

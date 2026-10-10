@@ -8,7 +8,7 @@ import { AxiosError } from 'axios';
 import { mock } from 'vitest-mock-extended';
 
 import { BadRequestError } from '@n8n/errors';
-import type { License } from '@/license';
+import { License } from '@/license';
 import { LicenseErrors, LicenseService } from '@/license/license.service';
 
 describe('LicenseService', () => {
@@ -142,7 +142,38 @@ describe('LicenseService', () => {
 		});
 	});
 
+	// CUSTOM PATCH: the enterprise.n8n.io calls are off by default.
+	describe('with the license server disabled', () => {
+		test('requestEnterpriseTrial throws and sends no request', async () => {
+			await expect(licenseService.requestEnterpriseTrial(mock())).rejects.toThrowError(
+				'License activation is disabled on this instance.',
+			);
+			expect(request).not.toHaveBeenCalled();
+		});
+
+		test('registerCommunityEdition throws and sends no request', async () => {
+			await expect(
+				licenseService.registerCommunityEdition({
+					userId: '123',
+					email: 'test@ema.il',
+					instanceId: '123',
+					instanceUrl: 'http://localhost',
+					licenseType: 'community-registered',
+				}),
+			).rejects.toThrowError('License activation is disabled on this instance.');
+			expect(request).not.toHaveBeenCalled();
+		});
+	});
+
 	describe('registerCommunityEdition', () => {
+		beforeEach(() => {
+			License.licenseServerDisabled = false;
+		});
+
+		afterEach(() => {
+			License.licenseServerDisabled = true;
+		});
+
 		test('on success', async () => {
 			request.mockResolvedValueOnce({ title: 'Title', text: 'Text', licenseKey: 'abc-123' });
 			const data = await licenseService.registerCommunityEdition({

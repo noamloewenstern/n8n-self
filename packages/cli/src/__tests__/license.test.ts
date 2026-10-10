@@ -41,13 +41,57 @@ describe('License', () => {
 		isLeader: true,
 	});
 
+	// CUSTOM PATCH: the SDK tests below run with the license server enabled.
 	beforeEach(async () => {
+		License.licenseServerDisabled = false;
 		const globalConfig = mock<GlobalConfig>({
 			license: licenseConfig,
 			multiMainSetup: { enabled: false },
 		});
 		license = new License(mockLogger(), instanceSettings, mock(), mock(), globalConfig);
 		await license.init();
+	});
+
+	afterEach(() => {
+		License.licenseServerDisabled = true;
+	});
+
+	describe('with the license server disabled', () => {
+		beforeEach(() => {
+			vi.mocked(LicenseManager).mockClear();
+			License.licenseServerDisabled = true;
+		});
+
+		test('init creates no license manager', async () => {
+			const disabled = new License(
+				mockLogger(),
+				instanceSettings,
+				mock(),
+				mock(),
+				mock<GlobalConfig>({ license: licenseConfig }),
+			);
+			await disabled.init();
+
+			expect(LicenseManager).not.toHaveBeenCalled();
+		});
+
+		test('activate, renew, renewIfDue and shutdown do nothing without a manager', async () => {
+			const disabled = new License(
+				mockLogger(),
+				instanceSettings,
+				mock(),
+				mock(),
+				mock<GlobalConfig>({ license: licenseConfig }),
+			);
+			await disabled.init();
+
+			await expect(disabled.activate(MOCK_ACTIVATION_KEY)).resolves.toBeUndefined();
+			await expect(disabled.renew()).resolves.toBeUndefined();
+			await expect(disabled.renewIfDue()).resolves.toBeUndefined();
+			await expect(disabled.shutdown()).resolves.toBeUndefined();
+			expect(LicenseManager.prototype.activate).not.toHaveBeenCalled();
+			expect(LicenseManager.prototype.renew).not.toHaveBeenCalled();
+		});
 	});
 
 	test('initializes license manager', async () => {
@@ -467,6 +511,15 @@ describe('License', () => {
 });
 
 describe('License', () => {
+	// CUSTOM PATCH: these tests run with the license server enabled.
+	beforeEach(() => {
+		License.licenseServerDisabled = false;
+	});
+
+	afterEach(() => {
+		License.licenseServerDisabled = true;
+	});
+
 	describe('onCertRefresh', () => {
 		let license: License;
 		const instanceSettings = mock<InstanceSettings>({

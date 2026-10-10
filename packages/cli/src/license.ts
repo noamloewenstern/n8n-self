@@ -36,6 +36,8 @@ export type FeatureReturnType = Partial<
 
 type LicenseRefreshCallback = (cert: string) => void;
 
+export const LICENSE_DISABLED_MESSAGE = 'License activation is disabled on this instance.';
+
 // CUSTOM PATCH: unlimited quotas. Users must stay exactly -1: any positive value
 // blocks non-owner login and invites. AI credits must stay positive: the UI shows the number.
 const CUSTOM_QUOTAS: Partial<Record<keyof FeatureReturnType, number>> = {
@@ -54,6 +56,9 @@ const CUSTOM_QUOTAS: Partial<Record<keyof FeatureReturnType, number>> = {
 
 @Service()
 export class License implements LicenseProvider {
+	// CUSTOM PATCH: no license manager and no calls to the license server. Tests set this to false.
+	static licenseServerDisabled = true;
+
 	private manager: LicenseManager | undefined;
 
 	private isShuttingDown = false;
@@ -82,6 +87,11 @@ export class License implements LicenseProvider {
 		}
 		if (this.isShuttingDown) {
 			this.logger.warn('License manager already shutting down');
+			return;
+		}
+		// CUSTOM PATCH: skip the SDK. Without a manager, activate, renew and renewIfDue do nothing.
+		if (License.licenseServerDisabled) {
+			this.logger.debug('License server is disabled, no license manager created');
 			return;
 		}
 

@@ -8,7 +8,6 @@ import { i18n as locale } from '@n8n/i18n';
 import { useUIStore } from '@/app/stores/ui.store';
 import { useToast } from '@n8n/composables/useToast';
 import { useDocumentTitle } from '@/app/composables/useDocumentTitle';
-import { hasPermission } from '@/app/utils/rbac/permissions';
 import { COMMUNITY_PLUS_ENROLLMENT_MODAL } from '../usage.constants';
 import { useUsersStore } from '@n8n/stores/users.store';
 import { getResourcePermissions } from '@n8n/permissions';
@@ -57,9 +56,11 @@ const eulaUrl = ref('');
 // must remove that key from the URL when the flow ends.
 const activationFromUrl = ref(false);
 
-const canUserActivateLicense = computed(() =>
-	hasPermission(['rbac'], { rbac: { scope: 'license:manage' } }),
-);
+// CUSTOM PATCH: license activation is disabled. This hides the Activate button.
+// const canUserActivateLicense = computed(() =>
+// 	hasPermission(['rbac'], { rbac: { scope: 'license:manage' } }),
+// );
+const canUserActivateLicense = computed(() => false);
 
 const badgedPlanName = computed(() => {
 	const [badge, name] = usageStore.planName.split(' ');
