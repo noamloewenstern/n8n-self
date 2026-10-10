@@ -46,3 +46,7 @@
 **/.env*
 **/.claude
 **/.git
+**/*.local
+**/.vscode
+**/.idea
+**/.remember
