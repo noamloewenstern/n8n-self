@@ -1,0 +1,35 @@
+# CUSTOM PATCH: ignore list for docker/images/n8n/Dockerfile.custom only.
+# BuildKit reads "<Dockerfile name>.dockerignore" before the root .dockerignore.
+# The root file is a whitelist for the prebuilt-compiled flow and blocks the
+# source tree. This build needs the source tree, so it has its own blocklist.
+# Every pattern has a "**/" prefix: a bare name matches only at the context root.
+
+# Secrets and agent or editor state. Never in a build context.
+**/.env*
+**/*.local
+**/.claude
+**/.remember
+**/.vscode
+**/.idea
+**/.git
+
+# Host build output. The image rebuilds all of it. Stale output can break the build.
+**/node_modules
+**/.turbo
+**/*.tsbuildinfo
+**/dist
+compiled
+build-manifest.json
+docker-build-manifest.json
+.agent-setup
+
+# Local logs and scratch files.
+**/*.log
+
+# Docs that the build does not read.
+v1-docs
+v2-docs
+
+# Keep tracked test fixtures that ship their own dist folders.
+# No env file is re-included, not even the *.example files. The build does not read them.
+!packages/quality/testing/playwright/fixtures/**
