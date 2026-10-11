@@ -63,3 +63,14 @@ Log of what we decided and why. Add new rows at the bottom. Do not re-ask closed
 | 2026-10-11 | `.dockerignore` missing lines (`**/*.local`, `**/.vscode`, `**/.idea`, `**/.remember`) go into the Docker-phase work. No separate commit. | Owner. |
 | 2026-10-10 | No auto-commit. One logical change per commit. | Global rules. |
 | 2026-10-11 | Docker image: one self-contained `docker/images/n8n/Dockerfile.custom` (compile stage + upstream stages). Upstream Dockerfile stays untouched. Source of truth for the options and the bump checklist: `docker-and-coolify.md`. | Owner. Works from a clean checkout and on Windows hosts. Cost: re-diff against upstream on every bump. |
+
+## Coolify deploy
+
+| Date | Decision | Why |
+|---|---|---|
+| 2026-10-11 | Keep module `mcp-registry` on: `N8N_DISABLED_MODULES` stays empty. Overrides r11 section 6. | Owner finds it useful. It polls `api.n8n.io` every 8 h. |
+| 2026-10-11 | `N8N_INSTANCE_AI_TEMPLATES_DISABLED=false`, `N8N_TEMPLATES_ENABLED=true`, `N8N_VERIFIED_PACKAGES_ENABLED=true`. | Owner wants templates and the community node catalog. |
+| 2026-10-11 | `N8N_INSTANCE_REPORTING_BASE_URL` and `_AUTH_TOKEN` exist in Coolify with empty values. | Reminder to fill them in later (backlog B2). |
+| 2026-10-11 | `.env.local` tuning vars copied to Coolify (execution pruning, timezone, SQLite, API, logs). | Useful on a real server. Names in `docker-and-coolify.md`. |
+| 2026-10-11 | Pin the four deprecated defaults (`N8N_RUNNERS_TASK_TIMEOUT=300`, `N8N_UNVERIFIED_PACKAGES_ENABLED=true`, both `N8N_COMPRESSION_NODE_*`) to today's values. | Keep behaviour after the future default change. Owner. |
+| 2026-10-11 | Coolify health check stays off on `n8n-v2`. | Proxy returned 502 with it on, 200 with it off. Cause not found. |

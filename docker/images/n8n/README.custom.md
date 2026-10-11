@@ -12,7 +12,7 @@ Full guide, options and checks: [`v2-docs/docker-and-coolify.md`](../../../v2-do
 4. Ports exposes: `5678`. Set your domain.
 5. Storage: add a persistent volume with destination `/home/node/.n8n`.
 6. Environment variables: add them as **runtime** variables only (see below). Turn off build-argument injection (Advanced).
-7. Health check: path `/healthz`, port `5678`.
+7. Health check: keep the Coolify health check **off**. With it on, the proxy returned 502 even though n8n was healthy. Check by hand: `GET /healthz` on `5678`.
 8. Deploy. On our PC a fresh build took about 8 minutes with warm caches and about 11 minutes with cold caches. A Coolify server can be slower. Plan for about 8 GB of free RAM (an estimate).
 
 Coolify clones the repository on Linux, so line endings are correct and the build needs no special steps.
@@ -30,7 +30,7 @@ Set them in Coolify. Never commit values. Names only:
 | `N8N_DIAGNOSTICS_ENABLED`, `N8N_VERSION_NOTIFICATIONS_ENABLED`, `N8N_PERSONALIZATION_ENABLED` | `false`. |
 | `N8N_ENABLED_MODULES` and the feature flag names in `.env.local.example` | As on your PC. |
 
-Do not copy `.env.local`. It has local paths.
+Do not copy `.env.local`. It has local paths. The full list of variables used on the first Coolify deploy is in `v2-docs/docker-and-coolify.md`, section "Deployed configuration".
 
 Coolify can pass environment variables to the build as `ARG`s. A build argument stays in the image history. Turn that off: **Advanced, then disable the injection of build arguments**. Mark every variable as runtime only. The build does not need any variable.
 

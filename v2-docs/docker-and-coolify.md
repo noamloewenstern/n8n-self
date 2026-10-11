@@ -102,12 +102,30 @@ All steps come from Coolify's public docs and are unverified on your server. [Co
    | `N8N_ENABLED_MODULES`, and the feature flag names in `.env.local.example` | The values you use on your PC. They are in `.env.local`. Copy only the ones you need. |
 
    The names above exist in the n8n config classes (`packages/@n8n/config/src`). [Source: grep of `@Env(...)` | 2026-10-11 | high] Do not copy `.env.local` as a whole.
-8. Health check: path `/healthz`, port `5678`.
+8. Health check: **leave the Coolify health check off.** On the first deploy (2026-10-11) the container was `running:healthy` and `/healthz` returned 200 inside it, but the proxy returned `502 Bad Gateway` for the domain. The 502 went away only after the Coolify health check was disabled (the `n8n-prod` app also has it off). The cause was not found. `GET /healthz` on port `5678` still works as a manual check.
 9. Deploy. Watch the build log. The first build downloads about 1,700 packages and compiles the whole monorepo.
    - On this PC (Docker Desktop) a full build from a fresh clone took 465 s (about 8 minutes) with a warm pnpm cache and warm base images. The first build, with cold caches, took about 11 minutes. The compile stage alone is about 2 minutes.
    - Coolify's build server may be slower. Give it 8 GB or more of free RAM. Coolify can use a separate build server. [Coolify: Build applications](https://coolify.io/docs/applications/builds/overview)
 
 The container runs the JavaScript task runner inside itself (the default `N8N_RUNNERS_MODE=internal`). You do not need the separate runners image. [Source: packages/@n8n/config/src/configs/runners.config.ts:17, container log "Registered runner JS Task Runner" | 2026-10-11 | high]
+
+### Deployed configuration (n8n-v2 on Coolify, 2026-10-11)
+
+First deploy: commit `0e50c14e`, build about 11 minutes, no errors. Domain `workflows.noaml.cloud`, Dockerfile `/docker/images/n8n/Dockerfile.custom`, port `5678`, volume at `/home/node/.n8n`, build-argument injection off, auto-deploy off, health check off.
+
+Runtime variables set in Coolify (names only, values are in Coolify):
+
+| Group | Names |
+|---|---|
+| Core | `N8N_ENCRYPTION_KEY`, `N8N_HOST`, `N8N_PROTOCOL`, `N8N_PORT`, `N8N_PROXY_HOPS`, `N8N_WEBHOOK_URL`, `N8N_EDITOR_BASE_URL` |
+| Telemetry and egress off | `N8N_DIAGNOSTICS_ENABLED`, `N8N_VERSION_NOTIFICATIONS_ENABLED`, `N8N_PERSONALIZATION_ENABLED`, `N8N_DYNAMIC_BANNERS_ENABLED`, `N8N_LICENSE_AUTO_RENEW_ENABLED`, `ENABLE_OBSERVABILITY`, `ENABLE_A365_OBSERVABILITY_EXPORTER`, `N8N_METRICS`, `N8N_HIRING_BANNER_ENABLED` |
+| Modules and flags | `N8N_ENABLED_MODULES`, `N8N_FEATURE_FLAG_OVERRIDES`, `N8N_EVAL_COLLECTIONS_ENABLED`, `N8N_CONFIG_EVALS_ENABLED`, `N8N_INSTANCE_AI_NODE_CONTEXT_ENABLED`, `N8N_INSTANCE_AI_NODE_USAGE_ENABLED`, `N8N_INSTANCE_AI_FOLDER_EXPLORATION_ENABLED`, `N8N_WORKFLOWS_GROUPS_WITH_TRIGGERS_ENABLED`, `N8N_WORKFLOWS_GROUPS_WITH_MANY_BOUNDARIES_ENABLED` |
+| Kept on (owner) | `N8N_VERIFIED_PACKAGES_ENABLED=true`, `N8N_INSTANCE_AI_TEMPLATES_DISABLED=false`, `N8N_DISABLED_MODULES` empty (`mcp-registry` stays on) |
+| Placeholders, empty | `N8N_INSTANCE_REPORTING_BASE_URL`, `N8N_INSTANCE_REPORTING_AUTH_TOKEN`. Fill them and add `instance-reporting` to `N8N_ENABLED_MODULES` to enable it (backlog B2). |
+| Tuning (from `.env.local`) | `DB_SQLITE_POOL_SIZE`, `DB_SQLITE_VACUUM_ON_STARTUP`, `EXECUTIONS_DATA_PRUNE`, `EXECUTIONS_DATA_MAX_AGE`, `EXECUTIONS_DATA_PRUNE_MAX_COUNT`, `EXECUTIONS_TIMEOUT_MAX`, `N8N_DATA_TABLES_MAX_SIZE_BYTES`, `N8N_DEFAULT_BINARY_DATA_MODE`, `GENERIC_TIMEZONE`, `N8N_BLOCK_ENV_ACCESS_IN_NODE`, `N8N_GIT_NODE_DISABLE_BARE_REPOS`, `N8N_COMMUNITY_PACKAGES_ENABLED`, `N8N_REINSTALL_MISSING_PACKAGES`, `N8N_PUBLIC_API_DISABLED`, `N8N_PUBLIC_API_SWAGGERUI_DISABLED`, `N8N_LOG_OUTPUT` |
+| Pinned to current behaviour (silences the startup deprecation log) | `N8N_RUNNERS_TASK_TIMEOUT=300`, `N8N_UNVERIFIED_PACKAGES_ENABLED=true`, `N8N_COMPRESSION_NODE_MAX_DECOMPRESSED_SIZE_BYTES=2147483648`, `N8N_COMPRESSION_NODE_MAX_ZIP_ENTRIES=5000` |
+
+Not set on purpose: `N8N_LICENSE_*`, AI provider keys, `N8N_AI_ASSISTANT_BASE_URL`, `N8N_INSTANCE_AI_MODEL`, Sentry DSNs, `N8N_RUNNERS_ENABLED`, `NODE_FUNCTION_ALLOW_*`, `WEBHOOK_URL`. The log line "Failed to start Python task runner in internal mode" is expected and harmless (no Python in the image; the JavaScript runner registers).
 
 ### Updates and rollback
 
