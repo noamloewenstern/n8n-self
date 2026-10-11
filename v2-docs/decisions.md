@@ -61,3 +61,4 @@ Log of what we decided and why. Add new rows at the bottom. Do not re-ask closed
 | 2026-10-10 | GitHub Actions disabled in repo settings by the owner. Do not rename `.github`. | A rename breaks local tooling (r9). Rename `.github/workflows/` only if ever needed. |
 | 2026-10-11 | `.dockerignore` missing lines (`**/*.local`, `**/.vscode`, `**/.idea`, `**/.remember`) go into the Docker-phase work. No separate commit. | Owner. |
 | 2026-10-10 | No auto-commit. One logical change per commit. | Global rules. |
+| 2026-10-11 | Docker image: one self-contained `docker/images/n8n/Dockerfile.custom` (compile stage + upstream stages). Upstream Dockerfile stays untouched. Source of truth for the options and the bump checklist: `docker-and-coolify.md`. | Owner. Works from a clean checkout and on Windows hosts. Cost: re-diff against upstream on every bump. |

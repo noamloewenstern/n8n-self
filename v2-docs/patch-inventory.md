@@ -175,9 +175,10 @@ Known side effects (not fixed, by scope):
 - `.env.local.example`: names of the same keys, no values.
 - `.dockerignore`: `**/.env*`, `**/*.local`, `**/.claude`, `**/.git`, `**/.vscode`, `**/.idea`, `**/.remember` (guard rules added on top of the existing whitelist).
 - `.gitignore`: local dev server logs.
+- `docker/images/n8n/Dockerfile.custom` and `Dockerfile.custom.dockerignore`: single-file image build, from a clean checkout to a running image. Upstream `docker/images/n8n/Dockerfile` is unchanged. Re-diff on every bump: `v2-docs/docker-and-coolify.md` section 8.
 - `CLAUDE.md`: v2 section (decisions, inventory, backlog, tests rule).
 - `v2-docs/`: decisions, inventory, backlog, research R1-R11, the two prompts.
 
 ### Open, in the backlog
 
-B1 engine-v2, B2 instance-reporting, B3 outdated check, B4 runtime egress audit, B5 Docker build (not run: Docker was not running), B6 audit logs UI check, B7. See `backlog.md`.
+B1 engine-v2, B2 instance-reporting, B3 outdated check, B4 runtime egress audit, B5 Docker build (`Dockerfile.custom` built and checked 2026-10-11; GHCR push and Coolify deploy not run), B6 audit logs UI check, B7. See `backlog.md`.

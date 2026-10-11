@@ -1,0 +1,167 @@
+# CUSTOM PATCH: single-file build of the n8n image, from a clean checkout to a
+# running image. Use it where `pnpm build:docker` cannot run (Coolify, native
+# Windows, any host without Node and pnpm).
+#
+# Stages (only the last one ships; the others stay in the build cache):
+#   source-build   Node + pnpm. Runs the repo build (scripts/build-n8n.mjs). Makes
+#                  /src/compiled: the production-only closure, with no dev
+#                  dependencies, sources or tests. Replaces the host steps of
+#                  `pnpm build:docker`.
+#   toolchain      UPSTREAM. Alpine + compilers.
+#   native-builder UPSTREAM. Rebuilds isolated-vm, sqlite3, kafka-javascript for Alpine.
+#   (last stage)   UPSTREAM. n8n runtime base + /src/compiled + the three native files.
+#
+# The later stages are docker/images/n8n/Dockerfile. The only changes in them:
+# `COPY ./compiled` became `COPY --from=source-build /src/compiled`, the entrypoint
+# comes from the same stage, and N8N_RELEASE_TYPE defaults to `stable`.
+# UPSTREAM-marked text must stay equal to upstream. On every n8n bump, diff it
+# (v2-docs/docker-and-coolify.md, "Re-check on every n8n bump").
+#
+# Build (the repo root is the context):
+#   docker build -f docker/images/n8n/Dockerfile.custom -t n8n-custom:local .
+# Coolify: Dockerfile build pack, base directory `/`, Dockerfile location
+#   `/docker/images/n8n/Dockerfile.custom`. See docker/images/n8n/README.custom.md.
+#
+# This file reads its own ignore list: Dockerfile.custom.dockerignore (BuildKit).
+# The list allows the full source tree and blocks secrets and local build output.
+# Never pass a secret as a build ARG. Build args stay in the image history.
+
+ARG NODE_VERSION=26.10.0
+ARG N8N_VERSION=snapshot
+
+# CUSTOM PATCH: glibc Node image for the compile stage. Upstream CI also compiles
+# on a glibc host (Ubuntu) and runs on Alpine. build-n8n.mjs handles that split
+# (musl agent-browser alias, native modules rebuilt below). Do not change this
+# to an Alpine image: the install would then pick musl optional packages.
+# The digest pins node:26.10.0-bookworm (resolved 2026-10-11). Change the tag and the digest together.
+ARG SOURCE_IMAGE=node:26.10.0-bookworm@sha256:e6cfc3514df35d1cb534e83f9279a242ad6e578692ab7b56d73dadcc7c4354a0
+ARG PNPM_VERSION=12.4.2
+
+# UPSTREAM: The digest pins node:26.10.0-alpine3.24 for amd64 and arm64. Change the tag and the digest together.
+ARG BUILDER_IMAGE=node:26.10.0-alpine3.24@sha256:0b36e8c136b94cd4fcf02188228e76c31ad5872eef3fec8cbd2eee500cfd9e80
+ARG RUNTIME_IMAGE=n8nio/base:26.10.0@sha256:9205c76a7745bfe71de35c2a0b7420238ccb0bdf69fc5273ab2e617fe918cf5f
+
+# CUSTOM PATCH: compile stage. Replaces the host steps `pnpm build:docker` runs
+# before `docker build`.
+FROM ${SOURCE_IMAGE} AS source-build
+ARG PNPM_VERSION
+# DOCKER_BUILD=true makes scripts/prepare.mjs skip `lefthook install`.
+# Do not set CI=true: it removes the e2e controller and adds --trust-lockfile,
+# and `pnpm build:docker` on a developer machine does neither.
+ENV DOCKER_BUILD=true
+# Node 25 and later do not ship corepack, so install pnpm with npm.
+RUN npm install -g pnpm@${PNPM_VERSION}
+WORKDIR /src
+COPY . .
+# Fail in seconds, not after a 10 minute build.
+# 1. Missing source: the wrong ignore file was used. The root .dockerignore is a
+#    whitelist for the prebuilt-compiled flow and removes the source tree.
+# 2. CRLF: a Windows checkout with core.autocrlf=true has CRLF in bin/n8n, and the
+#    shebang then reads node+CR. .gitattributes forces LF only for *.sh and *.patch.
+RUN if [ ! -f packages/cli/bin/n8n ]; then \
+      echo "ERROR: the source tree is not in the build context. BuildKit did not use docker/images/n8n/Dockerfile.custom.dockerignore. See docker/images/n8n/README.custom.md." >&2; \
+      exit 1; \
+    fi; \
+    if grep -q "$(printf '\r')" packages/cli/bin/n8n; then \
+      echo "ERROR: CRLF line endings in the build context. Build from a Linux git checkout, or from a clone made with core.autocrlf=false. See docker/images/n8n/README.custom.md." >&2; \
+      exit 1; \
+    fi
+# build-n8n.mjs imports zx before its own install step, so install first.
+# The cache mount keeps the pnpm store between builds. It is not part of the image.
+RUN --mount=type=cache,id=n8n-pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
+# Runs the repo's own build: pnpm build, pnpm deploy, the strips and the checks.
+# It writes /src/compiled (n8n) and /src/dist/task-runner-javascript (runners).
+RUN --mount=type=cache,id=n8n-pnpm-store,target=/root/.local/share/pnpm/store \
+    node scripts/build-n8n.mjs
+
+# UPSTREAM: The runtime base has no compiler, so this stage supplies one.
+FROM ${BUILDER_IMAGE} AS toolchain
+RUN apk add --no-cache python3 make g++
+ENV NODE_GYP=/usr/local/lib/node_modules/npm/node_modules/node-gyp/bin/node-gyp.js
+
+# UPSTREAM: Compile the native modules above `COPY ./compiled`. An application change
+# then does not start a new compile.
+# CUSTOM PATCH: the sources are now `COPY --from=source-build /src/compiled/...`.
+FROM toolchain AS native-builder
+
+# UPSTREAM: These paths are pnpm symlinks. Copying through them uses the resolved version.
+COPY --from=source-build /src/compiled/node_modules/.pnpm/isolated-vm@*/node_modules/isolated-vm /build/isolated-vm
+WORKDIR /build/isolated-vm
+# UPSTREAM: node-gyp-build reads /etc/alpine-release to find musl. DHI Alpine does not
+# have that file, so the loader uses the glibc prebuild and crashes.
+RUN rm -rf prebuilds && node "$NODE_GYP" rebuild --release -j max
+
+# UPSTREAM: sqlite3 needs node-addon-api for the headers, and `tar` because a gyp action
+# unpacks the sqlite source. pnpm gives each package its own directory, so the
+# dependencies of `tar` must come too.
+COPY --from=source-build /src/compiled/node_modules/.pnpm/sqlite3@*/node_modules/node-addon-api /build/node_modules/node-addon-api
+COPY --from=source-build /src/compiled/node_modules/.pnpm/sqlite3@*/node_modules/tar /build/node_modules/tar
+COPY --from=source-build /src/compiled/node_modules/.pnpm/tar@*/node_modules/@isaacs/fs-minipass /build/node_modules/@isaacs/fs-minipass
+COPY --from=source-build /src/compiled/node_modules/.pnpm/tar@*/node_modules/chownr /build/node_modules/chownr
+COPY --from=source-build /src/compiled/node_modules/.pnpm/tar@*/node_modules/minipass /build/node_modules/minipass
+COPY --from=source-build /src/compiled/node_modules/.pnpm/tar@*/node_modules/minizlib /build/node_modules/minizlib
+COPY --from=source-build /src/compiled/node_modules/.pnpm/tar@*/node_modules/yallist /build/node_modules/yallist
+COPY --from=source-build /src/compiled/node_modules/.pnpm/sqlite3@*/node_modules/sqlite3 /build/node_modules/sqlite3
+WORKDIR /build/node_modules/sqlite3
+RUN node "$NODE_GYP" rebuild --release
+
+# UPSTREAM: Confluent has no prebuild for the Node version that CI installs, so
+# `./compiled` has none. Compile it here against the base image librdkafka.
+# See https://github.com/confluentinc/confluent-kafka-javascript/issues/397
+RUN apk add --no-cache librdkafka-dev
+COPY --from=source-build /src/compiled/node_modules/.pnpm/@confluentinc+kafka-javascript@*/node_modules/nan /build/node_modules/nan
+COPY --from=source-build /src/compiled/node_modules/.pnpm/@confluentinc+kafka-javascript@*/node_modules/@confluentinc/kafka-javascript /build/node_modules/@confluentinc/kafka-javascript
+WORKDIR /build/node_modules/@confluentinc/kafka-javascript
+RUN BUILD_LIBRDKAFKA=0 node "$NODE_GYP" rebuild --release
+
+# UPSTREAM: A separate workflow builds the base image. A new base reaches this image only
+# when you change RUNTIME_IMAGE above.
+FROM ${RUNTIME_IMAGE}
+
+ARG N8N_VERSION
+# CUSTOM PATCH: upstream default is `dev`. This image is a release build, so use `stable`.
+ARG N8N_RELEASE_TYPE=stable
+ARG IMAGE_DESCRIPTION="Workflow Automation Tool"
+ENV NODE_ENV=production
+ENV N8N_RELEASE_TYPE=${N8N_RELEASE_TYPE}
+ENV SHELL=/bin/sh
+
+WORKDIR /home/node
+
+# CUSTOM PATCH: sources are the compile stage, not the build context.
+COPY --link --from=source-build /src/compiled /usr/local/lib/node_modules/n8n
+COPY --link --from=source-build --chmod=755 /src/docker/images/n8n/docker-entrypoint.sh /
+
+# UPSTREAM: Do not use --link here. These destinations are pnpm symlinks. A --link copy
+# resolves the destination against an empty root. It replaces the symlink with
+# a directory, and the module does not load. The build still succeeds.
+COPY --from=native-builder /build/node_modules/sqlite3/build/Release/node_sqlite3.node \
+     /usr/local/lib/node_modules/n8n/node_modules/sqlite3/build/Release/node_sqlite3.node
+COPY --from=native-builder /build/isolated-vm/build/Release/isolated_vm.node \
+     /usr/local/lib/node_modules/n8n/node_modules/isolated-vm/build/Release/isolated_vm.node
+# UPSTREAM: kafka-javascript has no top-level symlink, and its pnpm directory name holds
+# a patch hash. The shell must expand this destination.
+COPY --from=native-builder /build/node_modules/@confluentinc/kafka-javascript/build/Release/confluent-kafka-javascript.node /tmp/
+
+# UPSTREAM: The base image keeps node in /usr/bin and has no /usr/local/bin.
+RUN set -e; \
+    N8N=/usr/local/lib/node_modules/n8n; \
+    kafka=$(echo "$N8N"/node_modules/.pnpm/@confluentinc+kafka-javascript@*/node_modules/@confluentinc/kafka-javascript); \
+    install -D /tmp/confluent-kafka-javascript.node "$kafka/build/Release/confluent-kafka-javascript.node"; \
+    rm -rf "$N8N"/node_modules/.pnpm/isolated-vm@*/node_modules/isolated-vm/prebuilds; \
+    mkdir -p /usr/local/bin; \
+    ln -s "$N8N/bin/n8n" /usr/local/bin/n8n; \
+    mkdir -p /home/node/.n8n; \
+    chown -R node:node /home/node; \
+    rm -rf /root/.npm /tmp/*
+
+EXPOSE 5678/tcp
+USER node
+ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
+
+LABEL org.opencontainers.image.title="n8n" \
+      org.opencontainers.image.description="${IMAGE_DESCRIPTION}" \
+      org.opencontainers.image.source="https://github.com/n8n-io/n8n" \
+      org.opencontainers.image.url="https://n8n.io" \
+      org.opencontainers.image.version=${N8N_VERSION}
