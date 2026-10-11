@@ -104,7 +104,7 @@ All steps come from Coolify's public docs and are unverified on your server. [Co
    The names above exist in the n8n config classes (`packages/@n8n/config/src`). [Source: grep of `@Env(...)` | 2026-10-11 | high] Do not copy `.env.local` as a whole.
 8. Health check: path `/healthz`, port `5678`.
 9. Deploy. Watch the build log. The first build downloads about 1,700 packages and compiles the whole monorepo.
-   - On this PC (Docker Desktop, warm base images) a full build takes about 6 to 11 minutes. The compile stage alone is about 2 minutes with a warm pnpm cache.
+   - On this PC (Docker Desktop) a full build from a fresh clone took 465 s (about 8 minutes) with a warm pnpm cache and warm base images. The first build, with cold caches, took about 11 minutes. The compile stage alone is about 2 minutes.
    - Coolify's build server may be slower. Give it 8 GB or more of free RAM. Coolify can use a separate build server. [Coolify: Build applications](https://coolify.io/docs/applications/builds/overview)
 
 The container runs the JavaScript task runner inside itself (the default `N8N_RUNNERS_MODE=internal`). You do not need the separate runners image. [Source: packages/@n8n/config/src/configs/runners.config.ts:17, container log "Registered runner JS Task Runner" | 2026-10-11 | high]
@@ -189,7 +189,7 @@ The same applies to the Git repository itself: it holds the patches. Keep the fo
 | A build from the CRLF Windows tree stops at once with a clear message | **Verified** |
 | The same build without the guard gives a broken image (`env: 'node\r'`) | **Verified** (the first test build) |
 | The image has no dev tools and no tests | **Verified** (list in section 3.2) |
-| The built image after the last Dockerfile edit (source-missing guard, no `# syntax` line) | See the commit note in `backlog.md` B5 |
+| The committed state (commit `d12b6dee4f`, fresh LF clone at a short path) builds and passes the checks in section 9 | **Verified 2026-10-11** (exit 0 in 465 s with a warm pnpm cache; image 1.84 GB; no `.env*`; patches present; `/healthz` 200; settings and license values as above; 0 egress host lines) |
 | Coolify steps (build pack, volume, variables, health check) | From Coolify docs, not tried |
 | Coolify uses `Dockerfile.custom.dockerignore` | **Unverified.** The Coolify docs do not mention `.dockerignore`. The Dockerfile has a guard that stops with a clear message. |
 | The Coolify server has enough RAM for the build | Unknown. Needs 8 GB or more (estimate). |

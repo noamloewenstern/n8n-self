@@ -13,7 +13,7 @@ Full guide, options and checks: [`v2-docs/docker-and-coolify.md`](../../../v2-do
 5. Storage: add a persistent volume with destination `/home/node/.n8n`.
 6. Environment variables: add them as **runtime** variables only (see below). Turn off build-argument injection (Advanced).
 7. Health check: path `/healthz`, port `5678`.
-8. Deploy. The first build takes about 6 to 12 minutes. It needs about 8 GB of free RAM.
+8. Deploy. On our PC a fresh build took about 8 minutes with warm caches and about 11 minutes with cold caches. A Coolify server can be slower. Plan for about 8 GB of free RAM (an estimate).
 
 Coolify clones the repository on Linux, so line endings are correct and the build needs no special steps.
 

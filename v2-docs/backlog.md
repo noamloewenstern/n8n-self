@@ -36,14 +36,12 @@ Action when n8n marks it production-ready (public docs or changelog entry, or it
 - Goal: find telemetry or analytics calls that slipped through. Not a blocker.
 - Unverified until run: license SDK sends nothing at startup, FE handling of `-1` quotas, hard load of `/saml/onboarding`, OpenRouter `url: ''` fallback.
 
-## B5. Docker phase (re-check on bump)
+## B5. Docker phase
 
-Status 2026-10-11:
-
-- Done: `.dockerignore` guard lines. New single-file build `docker/images/n8n/Dockerfile.custom` (+ `.dockerignore`). Built on Docker Desktop. Checked: no `.env*` in the image, both license patches present, `/healthz` 200, settings and license values correct. Owner chose this option (A2) over a separate build host. See `docker-and-coolify.md`.
-- `pnpm build:docker` fails on native Windows (`scripts/build-n8n.mjs:26`). Not patched. `Dockerfile.custom` avoids it.
-- Open: push to GHCR (private package), Coolify deploy, build time and RAM on the Coolify server, Coolify env var names behind the proxy, `linux/arm64`.
-- **On every n8n bump:** run the list in `docker-and-coolify.md` section 8 (diff the Dockerfile against `Dockerfile.custom`, copy the pins, diff `build-n8n.mjs`, `dockerize-n8n.mjs` and `docker-bake.hcl`, check the native module list and the ignore list), then the checks in section 9.
+- `DOCKER_PLATFORM=linux/amd64 pnpm build:docker`, from a clean shell, not under dotenvx.
+- Add to `.dockerignore`: `**/*.local`, `**/.vscode`, `**/.idea`, `**/.remember`.
+- Build with a fresh `compiled/` so license patches ship.
+- Container env file separate from `.env.local`. Grep the image for `.env` files.
 - Source: `research/r8-docker.md`.
 
 ## B6. Audit logs (verify after Phase I)
