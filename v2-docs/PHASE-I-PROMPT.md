@@ -23,7 +23,7 @@ A personal local n8n v2 build that:
 ## 2. Binding rules
 
 - **Commits:** the owner authorizes the six commits in section 3 for this task. Make no other commit. Do not push. One logical change per commit. End each message with `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`. Commit message style: Conventional Commits. Security hygiene (`AGENTS.md`): describe what the code does, not the threat.
-- **Secrets:** never print, copy, or commit `.env.local` values. `.env.local` is already updated. Do not edit it unless a step needs a new key. Names only in docs.
+- **Secrets:** never print or copy secret values. `.env.local` has no secrets (see `v2-docs/env-local.md`); secrets are in `.env.secrets.local`. `.env.local` is already updated. Do not edit it unless a step needs a new key. Names only in docs.
 - **Surgical:** every changed line traces to the patch inventory. Touch no other code. Do not reformat. Do not fix unrelated issues. List them for the owner instead.
 - **No `any`. Avoid `as`.** Follow `AGENTS.md` TypeScript rules. Use shared utilities where they exist.
 - **Subagents:** set `model` explicitly. Use `sonnet` for implementation of a written spec. Use `opus` (or the session's top model) for the final review of the license change set. Give implementers Read, Grep, Glob, Edit, Write, and scoped Bash. Give reviewers Read, Grep, Glob only.

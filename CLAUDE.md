@@ -4,7 +4,7 @@
 
 ## Env vars
 
-- Source: `.env.local` at repo root (gitignored). Template: `.env.local.example`.
+- Source: `.env.local` at repo root (committed, no secrets). Secrets: `.env.secrets.local` (gitignored, create by hand). Details: `v2-docs/env-local.md`. Older template: `.env.local.example`.
 - Load with dotenvx. Prefix every dev command: `pnpm exec dotenvx run -f .env.local -- <cmd>`.
 - dotenvx expands `$HOME`, not `~`.
 - Telemetry, diagnostics, metrics, version notifications, hiring banner: all `false`.
@@ -29,6 +29,7 @@
 # v2 custom work (read before changing anything under `custom.v2`)
 
 - `v2-docs/decisions.md`: owner decisions and why. Follow them. Do not re-ask.
+- `v2-docs/env-local.md`: `.env.local` (committed) vs `.env.secrets.local` (not committed).
 - `v2-docs/patch-inventory.md`: every custom patch, status, and v1 mapping.
 - `v2-docs/backlog.md`: deferred work and re-check items (engine-v2, instance-reporting, runtime egress audit, Docker phase).
 - `v2-docs/research/`: R1 to R11 evidence (commit `55b3f5ac9e`).

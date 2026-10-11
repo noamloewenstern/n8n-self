@@ -58,7 +58,7 @@ Set these as runtime variables. Do not use `--build-arg` for any of them.
 | `N8N_ENABLED_MODULES` | `agent-evals,promotions` |
 | Feature flags | Copy the names and the values from the block `v2 additions: modules and feature flags` in `.env.local.example` in the repository (committed, no secrets). That block includes `N8N_FEATURE_FLAG_OVERRIDES`. Skip the lines for `N8N_INSTANCE_REPORTING_*`. |
 
-Do not set `N8N_LICENSE_*` or any AI key unless the owner asks. Do not look for or copy any `.env.local`. It does not exist on the server.
+Do not set `N8N_LICENSE_*` or any AI key unless the owner asks. Do not look for or copy any `.env.local`. It does not exist on the server. Layout of the local files: `v2-docs/env-local.md`.
 
 ## Rules
 

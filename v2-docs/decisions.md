@@ -9,8 +9,9 @@ Log of what we decided and why. Add new rows at the bottom. Do not re-ask closed
 |---|---|---|
 | 2026-10-10 | Block only telemetry and analytics egress (PostHog, RudderStack, Sentry, license server, version/instance-ID reporting). Useful in-app hosts are allowed. The old "localhost only" rule is dropped. | Owner wants in-app features that need a host. Wants no data sent to n8n analytics. |
 | 2026-10-10 | `N8N_DIAGNOSTICS_ENABLED=false`. Also patch the code default to `false`. | Stops outbound telemetry. Protects the Docker phase from one missing env var. |
-| 2026-10-10 | Never print or commit `.env.local` values. `.env.local` is gitignored. Non-secret mirror lives in `.env.local.example`. | Global no-secrets rule. |
-| 2026-10-11 | Owner allows editing `.env.local` (not committing). | Owner instruction. |
+| 2026-10-10 | Never print or commit secret values. Non-secret mirror lives in `.env.local.example`. | Global no-secrets rule. |
+| 2026-10-11 | Owner allows editing `.env.local`. | Owner instruction. |
+| 2026-10-11 | Commit `.env.local` (force-add). It holds no secrets. `ADMIN_EMAIL` and `ADMIN_PASSWORD` moved to gitignored `.env.secrets.local`. See `env-local.md`. | Owner asked to commit `.env.local`. The repository is public, so secrets stay out. |
 
 ## Tests
 

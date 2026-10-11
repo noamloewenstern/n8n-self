@@ -57,14 +57,14 @@ v1 patch categories (all wanted on v2):
 
 - Branch: `custom.v2`. Base n8n `2.43.0`. Node `>=24`. pnpm `12.4.2` pinned.
 - Dev commands work: `pnpm install`, `pnpm build` (72/72), `pnpm dev:be` (port 5678), `pnpm dev:fe:editor` (port 8080). Both returned HTTP 200.
-- Local env: `.env.local` at repo root (gitignored). Loaded with `pnpm exec dotenvx run -f .env.local -- <cmd>`.
+- Local env: `.env.local` at repo root (committed, no secrets; see `v2-docs/env-local.md`). Loaded with `pnpm exec dotenvx run -f .env.local -- <cmd>`.
 - `CLAUDE.md` (repo root) holds local dev setup. Keep it current.
 - `.dockerignore`: whitelist (`*`) plus secret guard lines at the end (`**/.env*`, `**/.claude`, `**/.git`). Not yet committed.
 - Commit `178fcc0999`: `v1-docs/` added.
 
 ### 2.3 Rules that apply (from the owner's global rules)
 
-- **No secrets in committed files.** The admin password lives only in `.env.local`. Never copy it into a doc, commit, or command line. Never put secrets in Docker `ARG` or image layers.
+- **No secrets in committed files.** The admin password lives only in `.env.secrets.local` (gitignored). Never copy it into a doc, commit, or command line. Never put secrets in Docker `ARG` or image layers.
 - **No auto-commit.** Commit only when the owner asks in the current turn.
 - **One logical change per commit.** Do not bundle categories.
 - **Verify behavior.** Type checks and unit tests do not prove a UI feature works. Run the app and exercise the feature.
@@ -162,7 +162,7 @@ EXECUTIONS_DATA_MAX_AGE=336
 N8N_DEFAULT_BINARY_DATA_MODE=filesystem
 ```
 
-Do not print `.env.local` values in chat or docs. Name the keys only.
+Do not print secret values in chat or docs. Name the keys only.
 
 ---
 
@@ -295,4 +295,4 @@ Rules: sections 2.3 and 4 are binding. Never copy values from .env.local into an
 - Last known state: env flags applied to `.env.local`. Backend not restarted after the last env change. Restart before runtime checks.
 - SearXNG is not running. Web search fails until it runs (`http://localhost:8888`).
 - No LLM connected. Workflow suggestions, evals, and assistant need one (owner will add OpenRouter in the admin UI).
-- Admin login exists in `.env.local` (`ADMIN_EMAIL`, `ADMIN_PASSWORD`). Use it for browser checks. Do not print it.
+- Admin login exists in `.env.secrets.local` (`ADMIN_EMAIL`, `ADMIN_PASSWORD`). Use it for browser checks. Do not print it.
