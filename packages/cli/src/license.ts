@@ -17,6 +17,7 @@ import { ensureError } from '@n8n/utils/errors/ensure-error';
 import type { TEntitlement, TLicenseBlock } from '@n8n_io/license-sdk';
 import { LicenseManager } from '@n8n_io/license-sdk';
 import { InstanceSettings } from 'n8n-core';
+import { UserError } from 'n8n-workflow';
 
 import { LicenseMetricsService } from '@/metrics/license-metrics.service';
 
@@ -261,6 +262,8 @@ export class License implements LicenseProvider {
 	async activate(activationKey: string): Promise<void>;
 	async activate(activationKey: string, eulaUri: string, userEmail: string): Promise<void>;
 	async activate(activationKey: string, eulaUri?: string, userEmail?: string): Promise<void> {
+		// CUSTOM PATCH: report the disabled state instead of a silent success.
+		if (License.licenseServerDisabled) throw new UserError(LICENSE_DISABLED_MESSAGE);
 		if (!this.manager) {
 			return;
 		}
@@ -328,8 +331,12 @@ export class License implements LicenseProvider {
 		// CUSTOM PATCH: every feature is licensed, except the two inverted flags.
 		// return this.manager?.hasFeatureEnabled(feature) ?? false;
 		// API_DISABLED and SHOW_NON_PROD_BANNER turn things off or add a banner when true.
+		// The two cloud UBB flags only change billing wording, so they stay off too.
 		return (
-			feature !== LICENSE_FEATURES.API_DISABLED && feature !== LICENSE_FEATURES.SHOW_NON_PROD_BANNER
+			feature !== LICENSE_FEATURES.API_DISABLED &&
+			feature !== LICENSE_FEATURES.SHOW_NON_PROD_BANNER &&
+			feature !== LICENSE_FEATURES.AI_GATEWAY_CLOUD_UBB &&
+			feature !== LICENSE_FEATURES.AI_ASSISTANT_CLOUD_UBB_ENTITLEMENT
 		);
 	}
 

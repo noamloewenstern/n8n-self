@@ -184,6 +184,8 @@ export class LicenseService {
 
 	async renewLicense() {
 		if (this.license.getPlanName() === 'Community') return; // unlicensed, nothing to renew
+		// CUSTOM PATCH: no license server, so nothing renews and no event is emitted.
+		if (License.licenseServerDisabled) return;
 
 		try {
 			await this.license.renew();
