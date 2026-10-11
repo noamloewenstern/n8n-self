@@ -128,7 +128,56 @@ Skipped: all FE RBAC, router, SSO, and MFA edits.
 | 5 | `bd0d6e5195` diagnostics default | done | `diagnostics.config.ts` `enabled = false`; `config.test.ts` default | 3 tests in `config.test.ts` fail on Windows paths (`uploadDir`). They failed before the patch too. Ignored per owner rule. |
 | 6 | `79b363409b` security audit local | done | `instance-risk-reporter.ts` `VERSION_CHECK_DISABLED` flag in `getOutdatedState()` | Used a flag, not commented-out code, so no imports became unused. Tests for this reporter were not updated (owner rule: ignore unit tests). |
 
+| 7 | `26507ebb9f` review fixes | done | `license.ts` `activate()` throws `LICENSE_DISABLED_MESSAGE`; `isLicensed` also returns false for `AI_GATEWAY_CLOUD_UBB` and `AI_ASSISTANT_CLOUD_UBB_ENTITLEMENT`; `license.service.ts` `renewLicense()` returns early | Added after the Opus review of commits 1-3. Not in the original six. Authorized by the owner on 2026-10-11. A startup `N8N_LICENSE_ACTIVATION_KEY` now logs "Could not activate license" (caught in `base-command.ts:564`). Boot continues. |
+
 Known side effects (not fixed, by scope):
-- `?key=` on the usage page URL calls activate. Backend does nothing and the UI shows "success". Do not use it.
+- `?key=` on the usage page URL now fails with the disabled message (commit 7). Before commit 7 it showed a false "success".
 - The "Plans" / "Manage plan" buttons still link to n8n.io. They are plain links.
 - Tests asserting upstream behavior fail or are stale: `license.test.ts` (partly updated in commits 1-3), `instance-risk-reporter` unit and integration tests.
+
+## J. Change reference: everything on `custom.v2` vs `master` (2026-10-11)
+
+### Commits (oldest first)
+
+| SHA | Title | Kind |
+|---|---|---|
+| `52b672aa7c` | docs: add v1 custom patch reference | docs |
+| `82d6223199` | docs: add v2 implementation prompt and plan | docs |
+| `9216a36b18` | chore: ignore local dev server logs | repo hygiene (`.gitignore`) |
+| `55b3f5ac9e` | build: exclude secrets and agent dirs from Docker build context | `.dockerignore` |
+| `e2078c587c` | docs: add v2 research, decisions, patch inventory and backlog | docs |
+| `4240f9b1d1` | chore: add v2 module and feature flag keys to the env example | `.env.local.example` (names only) |
+| `f6c66cf3bf` | feat(core): treat the instance as licensed (custom) | code |
+| `ba98f91973` | feat(core): remove license quotas (custom) | code |
+| `18c72a8c46` | feat(core): disable license server calls (custom) | code (BE + FE) |
+| `bee424ae60` | feat(core): enable the audit logs setting (custom) | code |
+| `bd0d6e5195` | feat(config): disable diagnostics by default (custom) | code |
+| `79b363409b` | feat(core): run the security audit without network calls (custom) | code |
+| `1dd7a60dc2` | docs: record v2 patch status | docs, plus the "ignore unit tests" rule |
+| `71b7e772a5` | build: exclude more local files from the Docker context | `.dockerignore` |
+| `26507ebb9f` | fix(core): report disabled license activation and renewal (custom) | code |
+
+### Code changes by file (find all with `git grep -n "CUSTOM PATCH"`)
+
+| File | Change |
+|---|---|
+| `packages/cli/src/license.ts` | `isLicensed()` true except `API_DISABLED`, `SHOW_NON_PROD_BANNER`, and the two cloud UBB flags. `getPlanName()` returns `Enterprise`. `CUSTOM_QUOTAS` map used by `getValue()`. `License.licenseServerDisabled = true` makes `init()` skip `LicenseManager`. `activate()` throws. Exports `LICENSE_DISABLED_MESSAGE`. |
+| `packages/cli/src/license/license.service.ts` | `requestEnterpriseTrial()` and `registerCommunityEdition()` throw `UserError`. `renewLicense()` returns early. |
+| `packages/cli/src/services/frontend.service.ts` | Settings refresh sets `enterprise.auditLogs = true`. |
+| `packages/@n8n/config/src/configs/diagnostics.config.ts` | `enabled` defaults to `false`. |
+| `packages/cli/src/security-audit/risk-reporters/instance-risk-reporter.ts` | `VERSION_CHECK_DISABLED` makes `getOutdatedState()` return `null`. No network call. |
+| `packages/frontend/editor-ui/src/features/settings/usage/views/SettingsUsageAndPlan.vue` | `canUserActivateLicense` is `false`. Activate button hidden. |
+| Test files (`license.test.ts`, `license.service.test.ts`, `frontend.service.test.ts`, `config.test.ts`) | Edited in commits 1-5 only, before the owner's "ignore unit tests" rule. Stale tests are expected. |
+
+### Non-code changes
+
+- `.env.local` (gitignored, never committed): telemetry and diagnostics off, `N8N_ENABLED_MODULES=agent-evals,promotions`, feature flag vars, `N8N_FEATURE_FLAG_OVERRIDES`. Values are not recorded here.
+- `.env.local.example`: names of the same keys, no values.
+- `.dockerignore`: `**/.env*`, `**/*.local`, `**/.claude`, `**/.git`, `**/.vscode`, `**/.idea`, `**/.remember` (guard rules added on top of the existing whitelist).
+- `.gitignore`: local dev server logs.
+- `CLAUDE.md`: v2 section (decisions, inventory, backlog, tests rule).
+- `v2-docs/`: decisions, inventory, backlog, research R1-R11, the two prompts.
+
+### Open, in the backlog
+
+B1 engine-v2, B2 instance-reporting, B3 outdated check, B4 runtime egress audit, B5 Docker build (not run: Docker was not running), B6 audit logs UI check, B7. See `backlog.md`.

@@ -327,7 +327,7 @@ export class License implements LicenseProvider {
 		this.logger.debug('License shut down');
 	}
 
-	isLicensed(feature: BooleanLicenseFeature) {
+	isLicensed(feature: BooleanLicenseFeature): boolean {
 		// CUSTOM PATCH: every feature is licensed, except the two inverted flags.
 		// return this.manager?.hasFeatureEnabled(feature) ?? false;
 		// API_DISABLED and SHOW_NON_PROD_BANNER turn things off or add a banner when true.
