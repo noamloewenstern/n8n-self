@@ -17,7 +17,7 @@
 - Build: `pnpm build`.
 - Backend dev (port 5678): `pnpm exec dotenvx run -f .env.local -- pnpm dev:be`.
 - Editor dev (port 8080): `pnpm exec dotenvx run -f .env.local -- pnpm dev:fe:editor`.
-- Docker image: `pnpm build:docker` → `n8nio/n8n:local`. Run with a separate container env file, not `.env.local`.
+- Docker image: `pnpm build:docker` → `n8nio/n8n:local` (fails on native Windows). Single-file alternative that works everywhere: `docker build -f docker/images/n8n/Dockerfile.custom -t n8n-custom:local .` from an LF clone (`core.autocrlf=false`, short path). Guide and bump checklist: `v2-docs/docker-and-coolify.md`. Run images with a separate container env file, not `.env.local`.
 
 ## Sources
 
